@@ -1,50 +1,65 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import CarteTrajet from '../components/CarteTrajet';
-import { FicheLivreur, ResumeCommande } from '../components/Communs';
-import { Carte, EnTete } from '../components/ui';
-import { useApp } from '../context/AppContext';
-import { COMMERCANTS, STATUTS } from '../data/mock';
+import { FicheContact, ResumeCommande } from '../components/Communs';
+import { Carte, EnTete, EtatChargement } from '../components/ui';
+import { STATUTS } from '../constantes';
+import { useDonnees } from '../hooks';
 import { couleurs } from '../theme';
 import { distanceKm } from '../utils';
 
-// Suivi d'un colis sur la carte du point A au point B (client et commerçant).
-export default function SuiviCommande({ commandeId, couleur, onRetour }) {
-  const { commandes } = useApp();
-  const commande = commandes.find((c) => c.id === commandeId);
-  if (!commande) return null;
-  const commercant = COMMERCANTS.find((m) => m.id === commande.commercantId);
-  const statut = STATUTS[commande.statut];
-  const restantKm = distanceKm(commande.depart, commande.arrivee) * (1 - commande.progression);
+// Suivi en direct d'un colis sur la carte, du point A au point B (client et commerçant).
+export default function SuiviCommande({ commandeId, couleur, onRetour, afficherClient }) {
+  const { donnees: commande, erreur, chargement, recharger } = useDonnees(`/commandes/${commandeId}`, 2000);
 
   return (
     <View style={{ flex: 1 }}>
-      <EnTete titre={`Suivi ${commande.id}`} couleur={couleur} onRetour={onRetour} />
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <CarteTrajet commande={commande} />
-        <Carte>
-          <Text style={[styles.statut, { color: statut.couleur }]}>{statut.label}</Text>
-          <View style={styles.barre}>
-            <View
-              style={[styles.barreRemplie, { width: `${Math.round(commande.progression * 100)}%`, backgroundColor: statut.couleur }]}
-            />
-          </View>
-          <Text>🅰️ {commercant?.nom} — {commercant?.adresse}</Text>
-          <Text>🅱️ {commande.adresseLivraison}</Text>
-          {commande.statut === 'en_cours' && (
-            <Text style={{ marginTop: 6, color: couleurs.texteDoux }}>
-              Distance restante : {restantKm.toFixed(1)} km
-            </Text>
-          )}
-        </Carte>
-        {commande.livreurId ? (
-          <FicheLivreur />
-        ) : (
+      <EnTete titre={`Suivi #${commandeId}`} couleur={couleur} onRetour={onRetour} />
+      {!commande ? (
+        <EtatChargement chargement={chargement} erreur={erreur} onReessayer={recharger} />
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: 16 }}>
+          <CarteTrajet commande={commande} />
           <Carte>
-            <Text>⏳ En attente qu'un livreur accepte le colis…</Text>
+            <Text style={[styles.statut, { color: STATUTS[commande.statut].couleur }]}>
+              {STATUTS[commande.statut].label}
+            </Text>
+            <View style={styles.barre}>
+              <View
+                style={[
+                  styles.barreRemplie,
+                  {
+                    width: `${Math.round(commande.progression * 100)}%`,
+                    backgroundColor: STATUTS[commande.statut].couleur,
+                  },
+                ]}
+              />
+            </View>
+            <Text>🅰️ {commande.commercant.nom} — {commande.commercant.adresse}</Text>
+            <Text>🅱️ {commande.adresseLivraison}</Text>
+            {commande.statut === 'en_cours' && commande.positionLivreur && (
+              <Text style={{ marginTop: 6, color: couleurs.texteDoux }}>
+                Distance restante : {distanceKm(commande.positionLivreur, commande.arrivee).toFixed(1)} km
+              </Text>
+            )}
           </Carte>
-        )}
-        <ResumeCommande commande={commande} />
-      </ScrollView>
+          {commande.livreur ? (
+            <FicheContact
+              titre="🛵 Livreur"
+              nom={commande.livreur.nom}
+              telephone={commande.livreur.telephone}
+              detail={commande.livreur.vehicule}
+            />
+          ) : (
+            <Carte>
+              <Text>⏳ En attente qu'un livreur accepte le colis…</Text>
+            </Carte>
+          )}
+          {afficherClient && (
+            <FicheContact titre="🙋 Client" nom={commande.client.nom} telephone={commande.client.telephone} />
+          )}
+          <ResumeCommande commande={commande} />
+        </ScrollView>
+      )}
     </View>
   );
 }

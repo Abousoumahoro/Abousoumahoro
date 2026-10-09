@@ -1,34 +1,57 @@
 import { useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { ListeNotifications, ResumeCommande } from '../../components/Communs';
-import { Bouton, Carte, EnTete, Onglets, Vide } from '../../components/ui';
-import { useApp } from '../../context/AppContext';
-import { CATEGORIES, COMMERCANT_CONNECTE } from '../../data/mock';
+import {
+  Bouton,
+  BoutonDeconnexion,
+  Carte,
+  EnTete,
+  EtatChargement,
+  Onglets,
+  Vide,
+} from '../../components/ui';
+import { CATEGORIES } from '../../constantes';
+import { useAuth } from '../../context/AuthContext';
+import { useDonnees } from '../../hooks';
 import { couleurs } from '../../theme';
 import { formatPrix } from '../../utils';
 import SuiviCommande from '../SuiviCommande';
 
 const COULEUR = couleurs.commercant;
 
-export default function EspaceCommercant({ onQuitter }) {
-  const { notifications } = useApp();
+export default function EspaceCommercant({ onDeconnexion }) {
+  const { utilisateur } = useAuth();
   const [onglet, setOnglet] = useState('articles');
   const [suiviId, setSuiviId] = useState(null);
 
   if (suiviId) {
-    return <SuiviCommande commandeId={suiviId} couleur={COULEUR} onRetour={() => setSuiviId(null)} />;
+    return (
+      <SuiviCommande commandeId={suiviId} couleur={COULEUR} onRetour={() => setSuiviId(null)} afficherClient />
+    );
   }
-
-  const nbNotifs = notifications.filter((n) => n.destinataire === 'commercant').length;
 
   return (
     <View style={{ flex: 1 }}>
-      <EnTete titre="Espace Commerçant" couleur={COULEUR} onRetour={onQuitter} />
+      <EnTete
+        titre={`🏪 ${utilisateur.nomBoutique}`}
+        couleur={COULEUR}
+        droite={<BoutonDeconnexion onPress={onDeconnexion} />}
+      />
       <View style={{ flex: 1 }}>
         {onglet === 'articles' && <MesArticles />}
         {onglet === 'publier' && <Publier onPublie={() => setOnglet('articles')} />}
         {onglet === 'commandes' && <Commandes onSuivre={setSuiviId} />}
-        {onglet === 'notifs' && <ListeNotifications destinataire="commercant" />}
+        {onglet === 'notifs' && <ListeNotifications />}
       </View>
       <Onglets
         couleur={COULEUR}
@@ -38,7 +61,7 @@ export default function EspaceCommercant({ onQuitter }) {
           { id: 'articles', label: 'Mes articles', icone: '🏷️' },
           { id: 'publier', label: 'Publier', icone: '➕' },
           { id: 'commandes', label: 'Commandes', icone: '📋' },
-          { id: 'notifs', label: 'Notifications', icone: '🔔', compteur: nbNotifs },
+          { id: 'notifs', label: 'Notifications', icone: '🔔' },
         ]}
       />
     </View>
@@ -46,21 +69,45 @@ export default function EspaceCommercant({ onQuitter }) {
 }
 
 function MesArticles() {
-  const { produits } = useApp();
-  const miens = produits.filter((p) => p.commercantId === COMMERCANT_CONNECTE);
+  const { api } = useAuth();
+  const { donnees, erreur, chargement, recharger } = useDonnees('/mes-produits');
+  if (!donnees) return <EtatChargement chargement={chargement} erreur={erreur} onReessayer={recharger} />;
+
+  const retirer = (produit) =>
+    Alert.alert('Retirer l\'article', `« ${produit.nom} » ne sera plus visible par les clients.`, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Retirer',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api(`/produits/${produit.id}`, { methode: 'DELETE' });
+            recharger();
+          } catch (e) {
+            Alert.alert('Erreur', e.message);
+          }
+        },
+      },
+    ]);
+
   return (
     <FlatList
       contentContainerStyle={{ padding: 16 }}
-      data={miens}
-      keyExtractor={(p) => p.id}
-      ListEmptyComponent={<Vide texte="Aucun article publié." />}
+      data={donnees}
+      keyExtractor={(p) => String(p.id)}
+      refreshControl={<RefreshControl refreshing={false} onRefresh={recharger} />}
+      ListEmptyComponent={<Vide texte="Aucun article publié. Utilisez l'onglet « Publier »." />}
       renderItem={({ item }) => (
-        <Carte>
-          <Text style={styles.titre}>{item.nom}</Text>
-          <Text style={styles.doux}>
-            {CATEGORIES.find((c) => c.id === item.categorie)?.label} · {item.description}
-          </Text>
-          <Text style={styles.prix}>{formatPrix(item.prix)}</Text>
+        <Carte style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.titre}>{item.nom}</Text>
+            <Text style={styles.doux}>
+              {CATEGORIES.find((c) => c.id === item.categorie)?.label}
+              {item.description ? ` · ${item.description}` : ''}
+            </Text>
+            <Text style={styles.prix}>{formatPrix(item.prix)}</Text>
+          </View>
+          <Bouton titre="Retirer" contour couleur={couleurs.danger} onPress={() => retirer(item)} />
         </Carte>
       )}
     />
@@ -68,28 +115,29 @@ function MesArticles() {
 }
 
 function Publier({ onPublie }) {
-  const { publierProduit } = useApp();
+  const { api } = useAuth();
   const [nom, setNom] = useState('');
   const [prix, setPrix] = useState('');
   const [description, setDescription] = useState('');
   const [categorie, setCategorie] = useState('repas');
+  const [envoi, setEnvoi] = useState(false);
 
   const prixNombre = parseInt(prix.replace(/\D/g, ''), 10);
-  const valide = nom.trim().length > 0 && prixNombre > 0;
+  const valide = nom.trim().length > 0 && prixNombre > 0 && !envoi;
 
-  const publier = () => {
-    publierProduit({
-      commercantId: COMMERCANT_CONNECTE,
-      nom: nom.trim(),
-      prix: prixNombre,
-      description: description.trim(),
-      categorie,
-    });
-    Alert.alert('Article publié ✅', `« ${nom.trim()} » est visible par les clients.`);
-    setNom('');
-    setPrix('');
-    setDescription('');
-    onPublie();
+  const publier = async () => {
+    setEnvoi(true);
+    try {
+      await api('/produits', {
+        methode: 'POST',
+        corps: { nom: nom.trim(), prix: prixNombre, description: description.trim(), categorie },
+      });
+      Alert.alert('Article publié ✅', `« ${nom.trim()} » est visible par les clients.`);
+      onPublie();
+    } catch (e) {
+      Alert.alert('Publication impossible', e.message);
+      setEnvoi(false);
+    }
   };
 
   return (
@@ -98,7 +146,13 @@ function Publier({ onPublie }) {
       <TextInput style={styles.champ} value={nom} onChangeText={setNom} placeholder="Ex : Poulet braisé" />
 
       <Text style={styles.label}>Prix (FCFA)</Text>
-      <TextInput style={styles.champ} value={prix} onChangeText={setPrix} keyboardType="number-pad" placeholder="Ex : 3000" />
+      <TextInput
+        style={styles.champ}
+        value={prix}
+        onChangeText={setPrix}
+        keyboardType="number-pad"
+        placeholder="Ex : 3000"
+      />
 
       <Text style={styles.label}>Description</Text>
       <TextInput
@@ -124,20 +178,26 @@ function Publier({ onPublie }) {
         ))}
       </View>
 
-      <Bouton titre="Publier l'article" couleur={COULEUR} desactive={!valide} onPress={publier} />
+      <Bouton
+        titre={envoi ? 'Publication…' : 'Publier l\'article'}
+        couleur={COULEUR}
+        desactive={!valide}
+        onPress={publier}
+      />
     </ScrollView>
   );
 }
 
 function Commandes({ onSuivre }) {
-  const { commandes } = useApp();
-  const miennes = commandes.filter((c) => c.commercantId === COMMERCANT_CONNECTE);
-  const ventes = miennes.filter((c) => c.statut === 'livree').reduce((s, c) => s + c.total, 0);
+  const { donnees, erreur, chargement, recharger } = useDonnees('/commandes', 5000);
+  if (!donnees) return <EtatChargement chargement={chargement} erreur={erreur} onReessayer={recharger} />;
+  const ventes = donnees.filter((c) => c.statut === 'livree').reduce((s, c) => s + c.total, 0);
   return (
     <FlatList
       contentContainerStyle={{ padding: 16 }}
-      data={miennes}
-      keyExtractor={(c) => c.id}
+      data={donnees}
+      keyExtractor={(c) => String(c.id)}
+      refreshControl={<RefreshControl refreshing={false} onRefresh={recharger} />}
       ListHeaderComponent={
         <Carte style={{ backgroundColor: COULEUR, borderColor: COULEUR }}>
           <Text style={{ color: '#fff' }}>Ventes livrées</Text>

@@ -19,11 +19,3 @@ export function distanceKm(a, b) {
     Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
-
-// Position du livreur entre A et B selon la progression (0 → 1).
-export function positionSurTrajet(depart, arrivee, progression) {
-  return {
-    latitude: depart.latitude + (arrivee.latitude - depart.latitude) * progression,
-    longitude: depart.longitude + (arrivee.longitude - depart.longitude) * progression,
-  };
-}

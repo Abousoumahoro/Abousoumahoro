@@ -1,12 +1,10 @@
 import { StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
-import { positionSurTrajet } from '../utils';
 
 // Carte affichant le trajet du point A (commerçant) au point B (client)
 // et la position actuelle du livreur.
 export default function CarteTrajet({ commande, hauteur = 280 }) {
-  const { depart, arrivee, progression, statut } = commande;
-  const livreur = positionSurTrajet(depart, arrivee, progression);
+  const { depart, arrivee, positionLivreur } = commande;
   const region = {
     latitude: (depart.latitude + arrivee.latitude) / 2,
     longitude: (depart.longitude + arrivee.longitude) / 2,
@@ -20,8 +18,8 @@ export default function CarteTrajet({ commande, hauteur = 280 }) {
         <Marker coordinate={depart} title="Point A" description="Retrait du colis" pinColor="orange" />
         <Marker coordinate={arrivee} title="Point B" description="Livraison" pinColor="green" />
         <Polyline coordinates={[depart, arrivee]} strokeWidth={4} strokeColor="#2563eb" />
-        {(statut === 'en_cours' || statut === 'livree') && (
-          <Marker coordinate={livreur} title="Livreur" anchor={{ x: 0.5, y: 0.5 }}>
+        {positionLivreur && (
+          <Marker coordinate={positionLivreur} title="Livreur" anchor={{ x: 0.5, y: 0.5 }}>
             <View style={styles.livreur}>
               <View style={styles.livreurPoint} />
             </View>

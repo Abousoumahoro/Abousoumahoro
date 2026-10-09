@@ -24,33 +24,54 @@ Projet [Expo](https://expo.dev) SDK 57 / React Native : un seul code pour Androi
 - Commandes reçues, suivi du colis sur la carte, coordonnées du livreur
 - Notifications et total des ventes
 
-> ⚠️ Version de démonstration : les données sont fictives (`src/data/mock.js`),
-> le paiement et le déplacement du livreur sont **simulés**. Étapes suivantes :
-> serveur + base de données, comptes utilisateurs, vrai GPS (`expo-location`),
-> notifications push (`expo-notifications`), API Orange Money / Wave / carte.
+## Comptes
+
+Chaque profil crée son compte (nom, téléphone, mot de passe, quartier ;
+nom de boutique pour le commerçant, véhicule pour le livreur) puis se connecte.
+La session reste enregistrée de façon sécurisée sur le téléphone (`expo-secure-store`).
+Chacun ne voit que ses propres commandes et notifications.
+
+> ⚠️ Encore simulés : le paiement en ligne et le déplacement du livreur
+> (le serveur fait avancer le livreur de A à B). Étapes suivantes : vrai GPS
+> (`expo-location`, la route `POST /livreur/position` est prête), notifications
+> push (`expo-notifications`), API Orange Money / Wave / carte.
 
 ## Démarrer
 
-```bash
-cd application-mobile
-npm install
-npm start
-```
+1. Lancez d'abord le **serveur** (voir `../serveur/README.md`) :
+   ```bash
+   cd serveur && npm install && npm start
+   ```
+2. Puis l'application, dans un autre terminal :
+   ```bash
+   cd application-mobile
+   npm install
+   npm start
+   ```
+3. Scannez le QR code avec **Expo Go** (Play Store / App Store).
+   Le téléphone et l'ordinateur doivent être sur le **même Wi-Fi** :
+   l'application trouve le serveur automatiquement (port 3000 de l'ordinateur).
 
-Puis scannez le QR code avec l'application **Expo Go** (Play Store / App Store).
+Pour utiliser un serveur en ligne : `EXPO_PUBLIC_API_URL=https://votre-serveur.com npm start`.
+
+Comptes de démo (mot de passe `demo1234`) : client `0500000010`,
+livreur `0100000020`, commerçants `0700000001` et `0700000002`.
 
 ## Structure
 
 ```
 application-mobile/
-├── App.js                         # Choix du rôle (3 boutons)
+├── App.js                         # Choix du profil (3 boutons) → connexion → espace
 ├── app.json                       # Nom, identifiants Android/iOS
 └── src/
-    ├── context/AppContext.js      # Commandes, panier, notifications, simulation du trajet
-    ├── data/mock.js               # Données de démo (Abidjan)
-    ├── components/                # Carte A→B, boutons, fiche livreur…
+    ├── api.js                     # Appels au serveur
+    ├── context/AuthContext.js     # Compte connecté, session sécurisée
+    ├── hooks.js                   # Chargement + rafraîchissement automatique
+    ├── constantes.js              # Catégories, paiements, statuts
+    ├── components/                # Carte A→B, boutons, fiches contact…
     └── screens/
         ├── ChoixRole.js
+        ├── Authentification.js    # Connexion / création de compte
         ├── SuiviCommande.js       # Suivi sur carte (client + commerçant)
         ├── client/EspaceClient.js
         ├── livreur/EspaceLivreur.js

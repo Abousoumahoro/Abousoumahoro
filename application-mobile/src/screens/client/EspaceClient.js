@@ -1,42 +1,66 @@
 import { useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ListeNotifications, ResumeCommande } from '../../components/Communs';
-import { Bouton, Carte, EnTete, Onglets, Vide } from '../../components/ui';
-import { useApp } from '../../context/AppContext';
-import { CATEGORIES, COMMERCANTS, MOYENS_PAIEMENT } from '../../data/mock';
+import { BoutonDeconnexion, Bouton, Carte, EnTete, EtatChargement, Onglets, Vide } from '../../components/ui';
+import { CATEGORIES, MOYENS_PAIEMENT } from '../../constantes';
+import { useAuth } from '../../context/AuthContext';
+import { useDonnees } from '../../hooks';
 import { couleurs } from '../../theme';
 import { formatPrix } from '../../utils';
 import SuiviCommande from '../SuiviCommande';
 
 const COULEUR = couleurs.client;
+const FRAIS_LIVRAISON = 1000;
 
-export default function EspaceClient({ onQuitter }) {
-  const { panier, notifications } = useApp();
+export default function EspaceClient({ onDeconnexion }) {
+  const { utilisateur } = useAuth();
   const [onglet, setOnglet] = useState('boutique');
   const [suiviId, setSuiviId] = useState(null);
+  // Panier : [{ produit, quantite }]
+  const [panier, setPanier] = useState([]);
 
   if (suiviId) {
     return <SuiviCommande commandeId={suiviId} couleur={COULEUR} onRetour={() => setSuiviId(null)} />;
   }
 
+  const ajouter = (produit) =>
+    setPanier((p) => {
+      const ligne = p.find((l) => l.produit.id === produit.id);
+      if (ligne) return p.map((l) => (l === ligne ? { ...l, quantite: l.quantite + 1 } : l));
+      return [...p, { produit, quantite: 1 }];
+    });
+  const retirer = (produitId) =>
+    setPanier((p) =>
+      p
+        .map((l) => (l.produit.id === produitId ? { ...l, quantite: l.quantite - 1 } : l))
+        .filter((l) => l.quantite > 0),
+    );
+
   const nbPanier = panier.reduce((s, l) => s + l.quantite, 0);
-  const nbNotifs = notifications.filter((n) => n.destinataire === 'client').length;
 
   return (
     <View style={{ flex: 1 }}>
-      <EnTete titre="Espace Client" couleur={COULEUR} onRetour={onQuitter} />
+      <EnTete
+        titre={`Bonjour ${utilisateur.nom.split(' ')[0]}`}
+        couleur={COULEUR}
+        droite={<BoutonDeconnexion onPress={onDeconnexion} />}
+      />
       <View style={{ flex: 1 }}>
-        {onglet === 'boutique' && <Boutique />}
+        {onglet === 'boutique' && <Boutique onAjouter={ajouter} />}
         {onglet === 'panier' && (
           <Panier
+            panier={panier}
+            onAjouter={ajouter}
+            onRetirer={retirer}
             onCommandeOk={(id) => {
+              setPanier([]);
               setOnglet('commandes');
               setSuiviId(id);
             }}
           />
         )}
         {onglet === 'commandes' && <Historique onSuivre={setSuiviId} />}
-        {onglet === 'notifs' && <ListeNotifications destinataire="client" />}
+        {onglet === 'notifs' && <ListeNotifications />}
       </View>
       <Onglets
         couleur={COULEUR}
@@ -46,17 +70,16 @@ export default function EspaceClient({ onQuitter }) {
           { id: 'boutique', label: 'Boutique', icone: '🏬' },
           { id: 'panier', label: 'Panier', icone: '🛒', compteur: nbPanier },
           { id: 'commandes', label: 'Commandes', icone: '📋' },
-          { id: 'notifs', label: 'Notifications', icone: '🔔', compteur: nbNotifs },
+          { id: 'notifs', label: 'Notifications', icone: '🔔' },
         ]}
       />
     </View>
   );
 }
 
-function Boutique() {
-  const { produits, ajouterAuPanier } = useApp();
+function Boutique({ onAjouter }) {
   const [categorie, setCategorie] = useState('repas');
-  const liste = produits.filter((p) => p.categorie === categorie);
+  const { donnees, erreur, chargement, recharger } = useDonnees(`/produits?categorie=${categorie}`);
 
   return (
     <View style={{ flex: 1 }}>
@@ -73,47 +96,65 @@ function Boutique() {
           </Pressable>
         ))}
       </View>
-      <FlatList
-        contentContainerStyle={{ padding: 16, paddingTop: 4 }}
-        data={liste}
-        keyExtractor={(p) => p.id}
-        ListEmptyComponent={<Vide texte="Aucun article dans cette catégorie." />}
-        renderItem={({ item }) => (
-          <Carte style={styles.produit}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.produitNom}>{item.nom}</Text>
-              <Text style={styles.doux}>{item.description}</Text>
-              <Text style={styles.doux}>🏪 {COMMERCANTS.find((m) => m.id === item.commercantId)?.nom}</Text>
-              <Text style={styles.prix}>{formatPrix(item.prix)}</Text>
-            </View>
-            <Bouton titre="+ Ajouter" couleur={COULEUR} onPress={() => ajouterAuPanier(item)} />
-          </Carte>
-        )}
-      />
+      {!donnees ? (
+        <EtatChargement chargement={chargement} erreur={erreur} onReessayer={recharger} />
+      ) : (
+        <FlatList
+          contentContainerStyle={{ padding: 16, paddingTop: 4 }}
+          data={donnees}
+          keyExtractor={(p) => String(p.id)}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={recharger} />}
+          ListEmptyComponent={<Vide texte="Aucun article dans cette catégorie." />}
+          renderItem={({ item }) => (
+            <Carte style={styles.produit}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.produitNom}>{item.nom}</Text>
+                {item.description ? <Text style={styles.doux}>{item.description}</Text> : null}
+                <Text style={styles.doux}>🏪 {item.commercant}</Text>
+                <Text style={styles.prix}>{formatPrix(item.prix)}</Text>
+              </View>
+              <Bouton titre="+ Ajouter" couleur={COULEUR} onPress={() => onAjouter(item)} />
+            </Carte>
+          )}
+        />
+      )}
     </View>
   );
 }
 
-function Panier({ onCommandeOk }) {
-  const { panier, ajouterAuPanier, retirerDuPanier, passerCommande } = useApp();
+function Panier({ panier, onAjouter, onRetirer, onCommandeOk }) {
+  const { api, utilisateur } = useAuth();
   const [paiement, setPaiement] = useState(null);
+  const [envoi, setEnvoi] = useState(false);
 
   if (panier.length === 0) return <Vide texte="Votre panier est vide." />;
 
   const sousTotal = panier.reduce((s, l) => s + l.produit.prix * l.quantite, 0);
-  const nbCommercants = new Set(panier.map((l) => l.produit.commercantId)).size;
-  const frais = 1000 * nbCommercants;
+  const frais = FRAIS_LIVRAISON * new Set(panier.map((l) => l.produit.commercantId)).size;
 
-  const commander = () => {
-    const nouvelles = passerCommande(paiement);
-    const moyen = MOYENS_PAIEMENT.find((p) => p.id === paiement);
-    Alert.alert(
-      'Commande envoyée ✅',
-      paiement === 'livraison'
-        ? 'Vous paierez au livreur à la réception.'
-        : `Paiement par ${moyen.label} (simulation de démo).`,
-    );
-    onCommandeOk(nouvelles[0].id);
+  const commander = async () => {
+    setEnvoi(true);
+    try {
+      const creees = await api('/commandes', {
+        methode: 'POST',
+        corps: {
+          paiement,
+          articles: panier.map((l) => ({ produitId: l.produit.id, quantite: l.quantite })),
+        },
+      });
+      const moyen = MOYENS_PAIEMENT.find((p) => p.id === paiement);
+      Alert.alert(
+        'Commande envoyée ✅',
+        paiement === 'livraison'
+          ? 'Vous paierez au livreur à la réception.'
+          : `Paiement par ${moyen.label} (simulation de démo).`,
+      );
+      onCommandeOk(creees[0].id);
+    } catch (e) {
+      Alert.alert('Commande impossible', e.message);
+    } finally {
+      setEnvoi(false);
+    }
   };
 
   return (
@@ -125,9 +166,9 @@ function Panier({ onCommandeOk }) {
             <Text style={styles.doux}>{formatPrix(l.produit.prix * l.quantite)}</Text>
           </View>
           <View style={styles.quantite}>
-            <Bouton titre="−" contour couleur={COULEUR} onPress={() => retirerDuPanier(l.produit.id)} />
+            <Bouton titre="−" contour couleur={COULEUR} onPress={() => onRetirer(l.produit.id)} />
             <Text style={styles.quantiteTexte}>{l.quantite}</Text>
-            <Bouton titre="+" contour couleur={COULEUR} onPress={() => ajouterAuPanier(l.produit)} />
+            <Bouton titre="+" contour couleur={COULEUR} onPress={() => onAjouter(l.produit)} />
           </View>
         </Carte>
       ))}
@@ -136,6 +177,7 @@ function Panier({ onCommandeOk }) {
         <Text>Sous-total : {formatPrix(sousTotal)}</Text>
         <Text>Livraison : {formatPrix(frais)}</Text>
         <Text style={[styles.produitNom, { marginTop: 4 }]}>Total : {formatPrix(sousTotal + frais)}</Text>
+        <Text style={[styles.doux, { marginTop: 6 }]}>📍 Livraison : {utilisateur.adresse}</Text>
       </Carte>
 
       <Text style={styles.section}>Moyen de paiement</Text>
@@ -150,9 +192,9 @@ function Panier({ onCommandeOk }) {
       ))}
 
       <Bouton
-        titre={paiement ? 'Commander' : 'Choisissez un moyen de paiement'}
+        titre={envoi ? 'Envoi…' : paiement ? 'Commander' : 'Choisissez un moyen de paiement'}
         couleur={COULEUR}
-        desactive={!paiement}
+        desactive={!paiement || envoi}
         onPress={commander}
         style={{ marginTop: 8, marginBottom: 24 }}
       />
@@ -161,14 +203,15 @@ function Panier({ onCommandeOk }) {
 }
 
 function Historique({ onSuivre }) {
-  const { commandes } = useApp();
-  // Démo : toutes les commandes passées par des clients.
+  const { donnees, erreur, chargement, recharger } = useDonnees('/commandes', 5000);
+  if (!donnees) return <EtatChargement chargement={chargement} erreur={erreur} onReessayer={recharger} />;
   return (
     <FlatList
       contentContainerStyle={{ padding: 16 }}
-      data={commandes}
-      keyExtractor={(c) => c.id}
-      ListEmptyComponent={<Vide texte="Aucune commande." />}
+      data={donnees}
+      keyExtractor={(c) => String(c.id)}
+      refreshControl={<RefreshControl refreshing={false} onRefresh={recharger} />}
+      ListEmptyComponent={<Vide texte="Aucune commande pour le moment." />}
       renderItem={({ item }) => <ResumeCommande commande={item} onPress={() => onSuivre(item.id)} />}
     />
   );

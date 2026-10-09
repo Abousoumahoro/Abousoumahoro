@@ -1,18 +1,21 @@
-import { FlatList, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useApp } from '../context/AppContext';
-import { LIVREUR, MOYENS_PAIEMENT, STATUTS } from '../data/mock';
+import { FlatList, Linking, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { MOYENS_PAIEMENT, STATUTS } from '../constantes';
+import { useDonnees } from '../hooks';
 import { couleurs } from '../theme';
 import { formatDate, formatPrix } from '../utils';
-import { Badge, Bouton, Carte, Vide } from './ui';
+import { Badge, Bouton, Carte, EtatChargement, Vide } from './ui';
 
-export function ListeNotifications({ destinataire }) {
-  const { notifications } = useApp();
-  const liste = notifications.filter((n) => n.destinataire === destinataire);
+export function ListeNotifications() {
+  const { donnees, erreur, chargement, recharger } = useDonnees('/notifications', 5000);
+  if (chargement || (erreur && !donnees)) {
+    return <EtatChargement chargement={chargement} erreur={erreur} onReessayer={recharger} />;
+  }
   return (
     <FlatList
       contentContainerStyle={{ padding: 16 }}
-      data={liste}
-      keyExtractor={(n) => n.id}
+      data={donnees}
+      keyExtractor={(n) => String(n.id)}
+      refreshControl={<RefreshControl refreshing={false} onRefresh={recharger} />}
       ListEmptyComponent={<Vide texte="Aucune notification pour le moment." />}
       renderItem={({ item }) => (
         <Carte>
@@ -24,15 +27,15 @@ export function ListeNotifications({ destinataire }) {
   );
 }
 
-// Coordonnées du livreur, avec boutons appeler / SMS / WhatsApp.
-export function FicheLivreur() {
-  const tel = LIVREUR.telephone.replace(/\s/g, '');
+// Coordonnées d'une personne (livreur, client…), avec boutons appeler / SMS / WhatsApp.
+export function FicheContact({ titre, nom, telephone, detail }) {
+  const tel = telephone.replace(/[^\d+]/g, '');
   return (
     <Carte>
-      <Text style={styles.titre}>🛵 Votre livreur</Text>
-      <Text style={{ fontSize: 16, fontWeight: '600' }}>{LIVREUR.nom}</Text>
-      <Text style={styles.doux}>{LIVREUR.vehicule}</Text>
-      <Text style={styles.doux}>{LIVREUR.telephone}</Text>
+      <Text style={styles.titre}>{titre}</Text>
+      <Text style={{ fontSize: 16, fontWeight: '600' }}>{nom}</Text>
+      {detail ? <Text style={styles.doux}>{detail}</Text> : null}
+      <Text style={styles.doux}>{telephone}</Text>
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
         <Bouton titre="📞 Appeler" style={{ flex: 1 }} couleur={couleurs.livreur} onPress={() => Linking.openURL(`tel:${tel}`)} />
         <Bouton titre="💬 SMS" style={{ flex: 1 }} couleur={couleurs.client} onPress={() => Linking.openURL(`sms:${tel}`)} />
@@ -53,10 +56,11 @@ export function ResumeCommande({ commande, onPress }) {
   return (
     <Pressable onPress={onPress}>
       <Carte>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-          <Text style={{ fontWeight: '700', fontSize: 16 }}>Commande {commande.id}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
+          <Text style={{ fontWeight: '700', fontSize: 16 }}>Commande #{commande.id}</Text>
           <Badge texte={statut.label} couleur={statut.couleur} />
         </View>
+        <Text style={styles.doux}>🏪 {commande.commercant.nom}</Text>
         {commande.articles.map((a) => (
           <Text key={a.produitId}>
             {a.quantite} × {a.nom}
@@ -66,7 +70,8 @@ export function ResumeCommande({ commande, onPress }) {
           Total : {formatPrix(commande.total + commande.fraisLivraison)}
         </Text>
         <Text style={styles.doux}>
-          {paiement?.icone} {paiement?.label} · {formatDate(commande.date)}
+          {paiement?.icone} {paiement?.label} · {commande.statutPaiement === 'paye' ? 'Payé' : 'À payer'} ·{' '}
+          {formatDate(commande.date)}
         </Text>
         {onPress && <Text style={{ color: couleurs.client, marginTop: 6 }}>Voir le suivi ›</Text>}
       </Carte>

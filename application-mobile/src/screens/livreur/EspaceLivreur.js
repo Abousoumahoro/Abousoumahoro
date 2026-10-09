@@ -1,19 +1,27 @@
 import { useState } from 'react';
-import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import CarteTrajet from '../../components/CarteTrajet';
-import { ListeNotifications } from '../../components/Communs';
-import { Badge, Bouton, Carte, EnTete, Onglets, Vide } from '../../components/ui';
-import { useApp } from '../../context/AppContext';
-import { COMMERCANTS, LIVREUR, STATUTS } from '../../data/mock';
+import { FicheContact, ListeNotifications } from '../../components/Communs';
+import {
+  Badge,
+  Bouton,
+  BoutonDeconnexion,
+  Carte,
+  EnTete,
+  EtatChargement,
+  Onglets,
+  Vide,
+} from '../../components/ui';
+import { STATUTS } from '../../constantes';
+import { useAuth } from '../../context/AuthContext';
+import { useDonnees } from '../../hooks';
 import { couleurs } from '../../theme';
 import { distanceKm, formatPrix } from '../../utils';
 
 const COULEUR = couleurs.livreur;
-// Rayon dans lequel un colis est considéré "à proximité".
-const RAYON_KM = 15;
 
-export default function EspaceLivreur({ onQuitter }) {
-  const { notifications } = useApp();
+export default function EspaceLivreur({ onDeconnexion }) {
+  const { utilisateur } = useAuth();
   const [onglet, setOnglet] = useState('disponibles');
   const [colisId, setColisId] = useState(null);
 
@@ -21,15 +29,17 @@ export default function EspaceLivreur({ onQuitter }) {
     return <DetailLivraison commandeId={colisId} onRetour={() => setColisId(null)} />;
   }
 
-  const nbNotifs = notifications.filter((n) => n.destinataire === 'livreur').length;
-
   return (
     <View style={{ flex: 1 }}>
-      <EnTete titre="Espace Livreur" couleur={COULEUR} onRetour={onQuitter} />
+      <EnTete
+        titre={`🛵 ${utilisateur.nom.split(' ')[0]}`}
+        couleur={COULEUR}
+        droite={<BoutonDeconnexion onPress={onDeconnexion} />}
+      />
       <View style={{ flex: 1 }}>
         {onglet === 'disponibles' && <ColisDisponibles onAcceptes={() => setOnglet('livraisons')} />}
         {onglet === 'livraisons' && <MesLivraisons onOuvrir={setColisId} />}
-        {onglet === 'notifs' && <ListeNotifications destinataire="livreur" />}
+        {onglet === 'notifs' && <ListeNotifications />}
       </View>
       <Onglets
         couleur={COULEUR}
@@ -38,60 +48,67 @@ export default function EspaceLivreur({ onQuitter }) {
         onglets={[
           { id: 'disponibles', label: 'Colis proches', icone: '📍' },
           { id: 'livraisons', label: 'Mes livraisons', icone: '🛵' },
-          { id: 'notifs', label: 'Notifications', icone: '🔔', compteur: nbNotifs },
+          { id: 'notifs', label: 'Notifications', icone: '🔔' },
         ]}
       />
     </View>
   );
 }
 
-// Liste des colis disponibles à proximité, sélection d'un ou plusieurs colis.
+// Colis disponibles à proximité ; sélection d'un ou plusieurs colis.
 function ColisDisponibles({ onAcceptes }) {
-  const { commandes, accepterColis } = useApp();
+  const { api } = useAuth();
+  const { donnees, erreur, chargement, recharger } = useDonnees('/livreur/colis-proches', 5000);
   const [selection, setSelection] = useState([]);
+  const [envoi, setEnvoi] = useState(false);
 
-  const proches = commandes
-    .filter((c) => c.statut === 'en_attente')
-    .map((c) => ({ ...c, distance: distanceKm(LIVREUR.position, c.depart) }))
-    .filter((c) => c.distance <= RAYON_KM)
-    .sort((a, b) => a.distance - b.distance);
+  if (!donnees) return <EtatChargement chargement={chargement} erreur={erreur} onReessayer={recharger} />;
 
+  // Ne garder sélectionnés que les colis encore disponibles.
+  const choisis = selection.filter((id) => donnees.some((c) => c.id === id));
   const basculer = (id) =>
     setSelection((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
-  const accepter = () => {
-    accepterColis(selection);
-    Alert.alert(
-      'Colis acceptés',
-      'Avant de partir, vérifiez toujours l\'intérieur de chaque colis.',
-    );
-    setSelection([]);
-    onAcceptes();
+  const accepter = async () => {
+    setEnvoi(true);
+    try {
+      const { acceptes, dejaPris } = await api('/livreur/accepter', { methode: 'POST', corps: { ids: choisis } });
+      setSelection([]);
+      Alert.alert(
+        `${acceptes.length} colis accepté(s)`,
+        (dejaPris.length ? `${dejaPris.length} colis déjà pris par un autre livreur.\n\n` : '') +
+          'Avant de partir, vérifiez toujours l\'intérieur de chaque colis.',
+      );
+      if (acceptes.length) onAcceptes();
+      else recharger();
+    } catch (e) {
+      Alert.alert('Erreur', e.message);
+    } finally {
+      setEnvoi(false);
+    }
   };
 
   return (
     <View style={{ flex: 1 }}>
       <FlatList
         contentContainerStyle={{ padding: 16 }}
-        data={proches}
-        keyExtractor={(c) => c.id}
-        ListHeaderComponent={
-          <Text style={styles.doux}>Colis à moins de {RAYON_KM} km de votre position :</Text>
-        }
+        data={donnees}
+        keyExtractor={(c) => String(c.id)}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={recharger} />}
+        ListHeaderComponent={<Text style={styles.doux}>Colis à proximité, du plus proche au plus loin :</Text>}
         ListEmptyComponent={<Vide texte="Aucun colis disponible à proximité." />}
         renderItem={({ item }) => {
-          const choisi = selection.includes(item.id);
-          const commercant = COMMERCANTS.find((m) => m.id === item.commercantId);
+          const choisi = choisis.includes(item.id);
           return (
             <Pressable onPress={() => basculer(item.id)}>
               <Carte style={choisi && { borderColor: COULEUR, borderWidth: 2 }}>
                 <View style={styles.ligne}>
                   <Text style={styles.titre}>
-                    {choisi ? '☑️' : '⬜'} Colis {item.id}
+                    {choisi ? '☑️' : '⬜'} Colis #{item.id}
                   </Text>
                   <Text style={{ fontWeight: '700', color: COULEUR }}>{item.distance.toFixed(1)} km</Text>
                 </View>
-                <Text>🅰️ {commercant?.nom} — {commercant?.adresse}</Text>
+                <Text>🅰️ {item.commercant.nom} — {item.commercant.adresse}</Text>
                 <Text>🅱️ {item.adresseLivraison}</Text>
                 <Text style={styles.doux}>
                   {item.articles.length} article(s) · Trajet {distanceKm(item.depart, item.arrivee).toFixed(1)} km
@@ -102,9 +119,14 @@ function ColisDisponibles({ onAcceptes }) {
           );
         }}
       />
-      {selection.length > 0 && (
+      {choisis.length > 0 && (
         <View style={styles.pied}>
-          <Bouton titre={`Prendre ${selection.length} colis`} couleur={COULEUR} onPress={accepter} />
+          <Bouton
+            titre={envoi ? 'Envoi…' : `Prendre ${choisis.length} colis`}
+            couleur={COULEUR}
+            desactive={envoi}
+            onPress={accepter}
+          />
         </View>
       )}
     </View>
@@ -112,13 +134,14 @@ function ColisDisponibles({ onAcceptes }) {
 }
 
 function MesLivraisons({ onOuvrir }) {
-  const { commandes } = useApp();
-  const miennes = commandes.filter((c) => c.livreurId === LIVREUR.id);
+  const { donnees, erreur, chargement, recharger } = useDonnees('/commandes', 5000);
+  if (!donnees) return <EtatChargement chargement={chargement} erreur={erreur} onReessayer={recharger} />;
   return (
     <FlatList
       contentContainerStyle={{ padding: 16 }}
-      data={miennes}
-      keyExtractor={(c) => c.id}
+      data={donnees}
+      keyExtractor={(c) => String(c.id)}
+      refreshControl={<RefreshControl refreshing={false} onRefresh={recharger} />}
       ListEmptyComponent={<Vide texte="Aucune livraison. Prenez un colis dans « Colis proches »." />}
       renderItem={({ item }) => {
         const statut = STATUTS[item.statut];
@@ -126,7 +149,7 @@ function MesLivraisons({ onOuvrir }) {
           <Pressable onPress={() => onOuvrir(item.id)}>
             <Carte>
               <View style={styles.ligne}>
-                <Text style={styles.titre}>Colis {item.id}</Text>
+                <Text style={styles.titre}>Colis #{item.id}</Text>
                 <Badge texte={statut.label} couleur={statut.couleur} />
               </View>
               <Text>🅱️ {item.adresseLivraison}</Text>
@@ -143,24 +166,45 @@ function MesLivraisons({ onOuvrir }) {
 
 // Vérification obligatoire de l'intérieur du colis, puis trajet A → B sur la carte.
 function DetailLivraison({ commandeId, onRetour }) {
-  const { commandes, confirmerVerificationEtPartir } = useApp();
-  const commande = commandes.find((c) => c.id === commandeId);
+  const { api } = useAuth();
+  const { donnees: commande, erreur, chargement, recharger } = useDonnees(`/commandes/${commandeId}`, 2000);
   const [coches, setCoches] = useState({});
   const [interieurOk, setInterieurOk] = useState(false);
-  if (!commande) return null;
+  const [envoi, setEnvoi] = useState(false);
 
-  const commercant = COMMERCANTS.find((m) => m.id === commande.commercantId);
+  const action = async (chemin, corps) => {
+    setEnvoi(true);
+    try {
+      await api(chemin, { methode: 'POST', corps });
+      await recharger();
+    } catch (e) {
+      Alert.alert('Erreur', e.message);
+    } finally {
+      setEnvoi(false);
+    }
+  };
+
+  if (!commande) {
+    return (
+      <View style={{ flex: 1 }}>
+        <EnTete titre={`Colis #${commandeId}`} couleur={COULEUR} onRetour={onRetour} />
+        <EtatChargement chargement={chargement} erreur={erreur} onReessayer={recharger} />
+      </View>
+    );
+  }
+
   const tousCoches = commande.articles.every((a) => coches[a.produitId]);
-  const peutPartir = tousCoches && interieurOk;
-  const aEncaisser = commande.paiement === 'livraison' ? commande.total + commande.fraisLivraison : 0;
+  const peutPartir = tousCoches && interieurOk && !envoi;
+  const aEncaisser =
+    commande.statutPaiement !== 'paye' ? commande.total + commande.fraisLivraison : 0;
 
   return (
     <View style={{ flex: 1 }}>
-      <EnTete titre={`Colis ${commande.id}`} couleur={COULEUR} onRetour={onRetour} />
+      <EnTete titre={`Colis #${commande.id}`} couleur={COULEUR} onRetour={onRetour} />
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <CarteTrajet commande={commande} />
         <Carte>
-          <Text>🅰️ Retrait : {commercant?.nom} — {commercant?.adresse}</Text>
+          <Text>🅰️ Retrait : {commande.commercant.nom} — {commande.commercant.adresse}</Text>
           <Text>🅱️ Livraison : {commande.adresseLivraison}</Text>
           {aEncaisser > 0 && (
             <Text style={{ marginTop: 6, fontWeight: '700', color: couleurs.danger }}>
@@ -192,10 +236,15 @@ function DetailLivraison({ commandeId, onRetour }) {
               </Text>
             </Pressable>
             <Bouton
-              titre={peutPartir ? '🛵 Partir vers le point B' : 'Cochez toutes les cases'}
+              titre={envoi ? 'Envoi…' : tousCoches && interieurOk ? '🛵 Partir vers le point B' : 'Cochez toutes les cases'}
               couleur={COULEUR}
               desactive={!peutPartir}
-              onPress={() => confirmerVerificationEtPartir(commande.id)}
+              onPress={() =>
+                action(`/commandes/${commande.id}/verification`, {
+                  articlesVerifies: commande.articles.filter((a) => coches[a.produitId]).map((a) => a.produitId),
+                  interieurOk,
+                })
+              }
               style={{ marginTop: 10 }}
             />
           </Carte>
@@ -204,9 +253,18 @@ function DetailLivraison({ commandeId, onRetour }) {
         {commande.statut === 'en_cours' && (
           <Carte>
             <Text style={styles.titre}>🛵 En route vers le point B…</Text>
-            <Text style={styles.doux}>
-              Restant : {(distanceKm(commande.depart, commande.arrivee) * (1 - commande.progression)).toFixed(1)} km
-            </Text>
+            {commande.positionLivreur && (
+              <Text style={styles.doux}>
+                Restant : {distanceKm(commande.positionLivreur, commande.arrivee).toFixed(1)} km
+              </Text>
+            )}
+            <Bouton
+              titre="✅ J'ai remis le colis"
+              couleur={COULEUR}
+              desactive={envoi}
+              onPress={() => action(`/commandes/${commande.id}/livree`)}
+              style={{ marginTop: 10 }}
+            />
           </Carte>
         )}
 
@@ -215,13 +273,16 @@ function DetailLivraison({ commandeId, onRetour }) {
             <Text style={[styles.titre, { color: COULEUR }]}>✅ Colis livré</Text>
           </Carte>
         )}
+
+        <FicheContact titre="🙋 Client" nom={commande.client.nom} telephone={commande.client.telephone} />
+        <FicheContact titre="🏪 Commerçant" nom={commande.commercant.nom} telephone={commande.commercant.telephone} />
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  ligne: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  ligne: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 8 },
   titre: { fontSize: 16, fontWeight: '700' },
   doux: { color: couleurs.texteDoux, marginTop: 2 },
   pied: { padding: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: couleurs.bordure },

@@ -1,8 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { BackHandler, StyleSheet } from 'react-native';
+import { ActivityIndicator, BackHandler, StyleSheet } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { AppProvider } from './src/context/AppContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import Authentification from './src/screens/Authentification';
 import ChoixRole from './src/screens/ChoixRole';
 import EspaceClient from './src/screens/client/EspaceClient';
 import EspaceCommercant from './src/screens/commercant/EspaceCommercant';
@@ -16,32 +17,51 @@ const ESPACES = {
 };
 
 export default function App() {
-  const [role, setRole] = useState(null);
+  return (
+    <SafeAreaProvider>
+      <AuthProvider>
+        <SafeAreaView style={styles.conteneur} edges={['top', 'bottom']}>
+          <Navigation />
+        </SafeAreaView>
+        <StatusBar style="dark" />
+      </AuthProvider>
+    </SafeAreaProvider>
+  );
+}
 
-  // Bouton « retour » Android : revenir au choix du rôle.
+function Navigation() {
+  const { utilisateur, demarrage, deconnexion } = useAuth();
+  const [roleChoisi, setRoleChoisi] = useState(null);
+
+  // Bouton « retour » Android : depuis la connexion, revenir au choix du profil.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (role) {
-        setRole(null);
+      if (!utilisateur && roleChoisi) {
+        setRoleChoisi(null);
         return true;
       }
       return false;
     });
     return () => sub.remove();
-  }, [role]);
+  }, [utilisateur, roleChoisi]);
 
-  const Espace = role ? ESPACES[role] : null;
+  if (demarrage) return <ActivityIndicator style={{ flex: 1 }} size="large" />;
 
-  return (
-    <SafeAreaProvider>
-      <AppProvider>
-        <SafeAreaView style={styles.conteneur} edges={['top', 'bottom']}>
-          {Espace ? <Espace onQuitter={() => setRole(null)} /> : <ChoixRole onChoisir={setRole} />}
-        </SafeAreaView>
-        <StatusBar style="dark" />
-      </AppProvider>
-    </SafeAreaProvider>
-  );
+  // Connecté : on ouvre directement l'espace correspondant au compte.
+  if (utilisateur) {
+    const Espace = ESPACES[utilisateur.role];
+    return (
+      <Espace
+        onDeconnexion={() => {
+          setRoleChoisi(null);
+          deconnexion();
+        }}
+      />
+    );
+  }
+
+  if (roleChoisi) return <Authentification role={roleChoisi} onRetour={() => setRoleChoisi(null)} />;
+  return <ChoixRole onChoisir={setRoleChoisi} />;
 }
 
 const styles = StyleSheet.create({

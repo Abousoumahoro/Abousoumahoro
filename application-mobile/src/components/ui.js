@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { couleurs } from '../theme';
 
 export function Bouton({ titre, onPress, couleur = couleurs.primaire, desactive, contour, style }) {
@@ -114,3 +114,23 @@ const styles = StyleSheet.create({
   ongletTexte: { fontSize: 11, marginTop: 2, textAlign: 'center' },
   vide: { textAlign: 'center', color: couleurs.texteDoux, marginTop: 40, fontSize: 15 },
 });
+
+// Affiche un indicateur de chargement ou un message d'erreur (avec « Réessayer »).
+export function EtatChargement({ chargement, erreur, onReessayer }) {
+  if (chargement) return <ActivityIndicator style={{ marginTop: 40 }} size="large" />;
+  if (!erreur) return null;
+  return (
+    <View style={{ padding: 24, alignItems: 'center' }}>
+      <Text style={{ color: couleurs.danger, textAlign: 'center', marginBottom: 12 }}>{erreur}</Text>
+      {onReessayer && <Bouton titre="Réessayer" contour couleur={couleurs.danger} onPress={onReessayer} />}
+    </View>
+  );
+}
+
+export function BoutonDeconnexion({ onPress }) {
+  return (
+    <Pressable onPress={onPress} hitSlop={12}>
+      <Text style={{ color: '#fff', fontSize: 14 }}>Déconnexion</Text>
+    </Pressable>
+  );
+}
