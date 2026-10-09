@@ -5,7 +5,8 @@ import { creerUtilisateur } from './db.js';
 import { QUARTIERS, quartierParId } from './quartiers.js';
 import { annoncerCommande, distanceKm, notifier, RAYON_KM } from './outils.js';
 import { demarrerPaiement, paiementPublic, routesPaiement, verifierPaiement, appliquerResultat } from './paiements.js';
-import { normaliserTelephone, verifierMotDePasse } from './securite.js';
+import { jetonPushValide } from './push.js';
+import { creerLimiteur, normaliserTelephone, verifierMotDePasse } from './securite.js';
 
 export const FRAIS_LIVRAISON = 1000;
 const PAIEMENT_MOBILE = ['orange', 'wave'];
@@ -87,8 +88,12 @@ function commandeComplete(db, c) {
 
 // urlPublique : adresse internet du serveur (obligatoire avec les vraies clés Orange / Wave,
 // pour les pages de retour et les notifications). Sinon : l'adresse utilisée par le téléphone.
-export function creerApp({ db, jetons, fournisseurs, urlPublique }) {
+export function creerApp({ db, jetons, fournisseurs, urlPublique, carteSimulee = true }) {
   const app = express();
+  // Derrière un relais HTTPS (Caddy, Nginx, hébergeur) : utiliser la vraie adresse et le https.
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
+  app.disable('x-powered-by');
+  const limiteurConnexion = creerLimiteur();
   // Le corps brut est gardé pour vérifier la signature des notifications Wave.
   app.use(express.json({ verify: (req, _res, buf) => { req.corpsBrut = buf; } }));
   // Logos Orange Money / Wave affichés sur les pages de paiement.
@@ -146,14 +151,36 @@ export function creerApp({ db, jetons, fournisseurs, urlPublique }) {
 
   app.post('/auth/connexion', (req, res) => {
     const telephone = normaliserTelephone(req.body?.telephone);
+    const minutes = limiteurConnexion.bloque(telephone);
+    if (minutes) echec(429, `Trop de tentatives. Réessayez dans ${minutes} min.`);
     const u = db.prepare('SELECT * FROM utilisateurs WHERE telephone = ?').get(telephone);
     if (!u || !verifierMotDePasse(String(req.body?.motDePasse || ''), u.mot_de_passe)) {
+      limiteurConnexion.echec(telephone);
       echec(401, 'Téléphone ou mot de passe incorrect');
     }
+    limiteurConnexion.reussite(telephone);
     res.json({ jeton: jetons.signer(u), utilisateur: profilPublic(u) });
   });
 
   app.get('/moi', authentifier(), (req, res) => res.json(profilPublic(req.utilisateur)));
+
+  // Le téléphone enregistre son jeton push à la connexion, et le retire à la déconnexion.
+  app.post('/moi/push', authentifier(), (req, res) => {
+    const jeton = req.body?.jeton;
+    if (!jetonPushValide(jeton)) echec(400, 'Jeton push invalide');
+    db.prepare(
+      'INSERT INTO push_jetons (jeton, utilisateur_id) VALUES (?, ?) ON CONFLICT(jeton) DO UPDATE SET utilisateur_id = excluded.utilisateur_id',
+    ).run(jeton, req.utilisateur.id);
+    res.json({ ok: true });
+  });
+
+  app.post('/moi/push/supprimer', authentifier(), (req, res) => {
+    db.prepare('DELETE FROM push_jetons WHERE jeton = ? AND utilisateur_id = ?').run(
+      String(req.body?.jeton ?? ''),
+      req.utilisateur.id,
+    );
+    res.json({ ok: true });
+  });
 
   // ---------- Articles ----------
   const SELECT_PRODUITS = `SELECT p.*, u.nom_boutique FROM produits p
@@ -202,6 +229,13 @@ export function creerApp({ db, jetons, fournisseurs, urlPublique }) {
     const client = req.utilisateur;
     const { articles, paiement } = req.body || {};
     if (!PAIEMENTS.includes(paiement)) echec(400, 'Moyen de paiement invalide');
+    // La carte n'est pas encore branchée sur un vrai prestataire : refusée en production.
+    if (paiement === 'carte' && !carteSimulee) {
+      echec(400, 'Le paiement par carte n\'est pas encore disponible. Choisissez Wave, Orange Money ou le paiement à la livraison.');
+    }
+    if (fournisseurs[paiement]?.indisponible) {
+      echec(400, `${paiement === 'wave' ? 'Wave' : 'Orange Money'} n'est pas encore disponible. Choisissez un autre moyen de paiement.`);
+    }
     if (!Array.isArray(articles) || articles.length === 0) echec(400, 'Panier vide');
 
     const parCommercant = new Map();

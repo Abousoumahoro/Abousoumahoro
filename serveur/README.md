@@ -24,6 +24,20 @@ Au premier démarrage, des comptes de démo sont créés (mot de passe `demo1234
 
 Les données sont dans `donnees/livraison.db` (supprimez le dossier `donnees/` pour repartir de zéro).
 
+## Mise en ligne (Docker + HTTPS)
+
+`Dockerfile`, `docker-compose.yml` (avec Caddy pour le HTTPS automatique) et `.env.exemple`
+sont prêts : voir **../GUIDE-MISE-EN-SERVICE.md**, étape 2.
+
+En production (`NODE_ENV=production`) : pas de comptes de démo et **aucun paiement simulé**
+(Wave / Orange Money sans clés et carte bancaire sont refusés). `DEMO=1` réactive la démo.
+
+## Sécurité supplémentaire
+
+- Après 8 mauvais mots de passe, le numéro est bloqué 15 minutes.
+- Notifications push via Expo (route `POST /moi/push`) ; jetons supprimés à la déconnexion
+  ou quand le téléphone n'existe plus.
+
 ## Configuration (variables d'environnement)
 
 | Variable | Rôle | Défaut |

@@ -37,3 +37,32 @@ export function creerJetons(dossierDonnees) {
 }
 
 export const normaliserTelephone = (tel) => String(tel || '').replace(/[^\d+]/g, '');
+
+// Limite les essais de mot de passe : après `max` échecs, le numéro est bloqué
+// pendant `dureeMs` (protège contre ceux qui essaient de deviner les mots de passe).
+export function creerLimiteur({ max = 8, dureeMs = 15 * 60 * 1000 } = {}) {
+  const essais = new Map(); // cle → { echecs, debut }
+  const lire = (cle) => {
+    const e = essais.get(cle);
+    if (e && Date.now() - e.debut > dureeMs) {
+      essais.delete(cle);
+      return null;
+    }
+    return e;
+  };
+  return {
+    // Minutes restantes si bloqué, sinon 0.
+    bloque(cle) {
+      const e = lire(cle);
+      return e && e.echecs >= max ? Math.ceil((dureeMs - (Date.now() - e.debut)) / 60000) : 0;
+    },
+    echec(cle) {
+      const e = lire(cle) || { echecs: 0, debut: Date.now() };
+      e.echecs += 1;
+      essais.set(cle, e);
+    },
+    reussite(cle) {
+      essais.delete(cle);
+    },
+  };
+}

@@ -1,0 +1,31 @@
+# Mise en ligne sur un serveur (VPS) : HTTPS automatique avec Caddy.
+# 1. Copiez .env.exemple en .env et remplissez-le.
+# 2. Faites pointer votre nom de domaine (DOMAINE) vers l'adresse IP du serveur.
+# 3. Lancez : docker compose up -d
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      URL_PUBLIQUE: https://${DOMAINE}
+    volumes:
+      - donnees:/donnees
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAINE: ${DOMAINE}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_donnees:/data
+    depends_on:
+      - api
+
+volumes:
+  donnees:
+  caddy_donnees:

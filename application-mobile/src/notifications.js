@@ -1,4 +1,6 @@
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
+import * as SecureStore from 'expo-secure-store';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { useAuth } from './context/AuthContext';
@@ -26,8 +28,22 @@ async function preparer() {
   return status === 'granted';
 }
 
+export const CLE_JETON_PUSH = 'jeton_push';
+
+// Notifications « push » (même application fermée). Nécessite une application
+// compilée avec EAS (projectId dans app.json) : dans Expo Go, on retourne null.
+async function enregistrerPush(api) {
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+  if (!projectId || Constants.appOwnership === 'expo') return null;
+  const { data: jeton } = await Notifications.getExpoPushTokenAsync({ projectId });
+  await api('/moi/push', { methode: 'POST', corps: { jeton } });
+  await SecureStore.setItemAsync(CLE_JETON_PUSH, jeton);
+  return jeton;
+}
+
 // Surveille les nouvelles notifications du serveur et les affiche sur le téléphone
 // (bannière + son), tant que l'application est ouverte ou vient d'être mise en arrière-plan.
+// Si les push sont actives, c'est le serveur qui envoie : pas besoin de surveiller.
 export function useAlertesTelephone(intervalleMs = 8000) {
   const { api, utilisateur } = useAuth();
   const dernierId = useRef(null);
@@ -36,10 +52,12 @@ export function useAlertesTelephone(intervalleMs = 8000) {
     if (!utilisateur) return undefined;
     dernierId.current = null;
     let autorise = false;
+    let push = false;
     let actif = true;
     preparer()
-      .then((ok) => {
+      .then(async (ok) => {
         autorise = ok;
+        if (ok) push = Boolean(await enregistrerPush(api).catch(() => null));
       })
       .catch(() => {});
 
@@ -49,7 +67,7 @@ export function useAlertesTelephone(intervalleMs = 8000) {
         if (!actif || liste.length === 0) return;
         const max = liste[0].id;
         // Premier chargement : on ne ré-affiche pas l'historique.
-        if (dernierId.current !== null && autorise) {
+        if (dernierId.current !== null && autorise && !push) {
           const nouvelles = liste.filter((n) => n.id > dernierId.current).reverse();
           for (const n of nouvelles) {
             await Notifications.scheduleNotificationAsync({

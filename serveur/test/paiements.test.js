@@ -241,3 +241,32 @@ test('migration d\'une base créée avant le paiement mobile', () => {
   assert.match(fk, /REFERENCES commandes\(id\)/);
   db.close();
 });
+
+test('production : aucune simulation de paiement pour de vrais clients', async () => {
+  const { fournisseursDepuisEnv } = await import('../src/fournisseurs.js');
+  const f = fournisseursDepuisEnv({}, { simulationAutorisee: false });
+  const db = ouvrirBase(':memory:');
+  remplirDemo(db);
+  const app = creerApp({ db, jetons: creerJetons(dossier), fournisseurs: f, carteSimulee: false });
+  const serveur = await new Promise((ok) => {
+    const s = app.listen(0, () => ok(s));
+  });
+  serveurs.push(serveur);
+  const base = `http://127.0.0.1:${serveur.address().port}`;
+  const post = (chemin, corps, jeton) =>
+    fetch(base + chemin, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(jeton && { Authorization: `Bearer ${jeton}` }) },
+      body: JSON.stringify(corps),
+    }).then(async (r) => ({ statut: r.status, corps: await r.json() }));
+  const { jeton } = (await post('/auth/connexion', { telephone: '0500000010', motDePasse: 'demo1234' })).corps;
+  for (const paiement of ['wave', 'orange', 'carte']) {
+    const r = await post('/commandes', { paiement, articles: [{ produitId: 1, quantite: 1 }] }, jeton);
+    assert.equal(r.statut, 400, paiement);
+    assert.match(r.corps.erreur, /pas encore disponible/);
+  }
+  // Aucune commande créée par ces refus ; le paiement à la livraison reste possible.
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM commandes').get().n, 0);
+  const ok = await post('/commandes', { paiement: 'livraison', articles: [{ produitId: 1, quantite: 1 }] }, jeton);
+  assert.equal(ok.statut, 201);
+});

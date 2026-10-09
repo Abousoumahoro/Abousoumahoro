@@ -55,9 +55,14 @@ Interrupteur **« 📍 GPS réel »** en haut de l'espace livreur :
 Chaque nouvel événement (commande payée, colis accepté, livreur en route, colis livré…)
 s'affiche en bannière avec un son, tant que l'application est ouverte ou en arrière-plan récent.
 
-> Les notifications quand l'application est **complètement fermée** demandent une
-> application compilée (EAS Build) et des notifications « push » envoyées par le serveur :
-> c'est l'étape à faire avant la publication sur le Play Store / l'App Store.
+Dans l'application compilée (EAS Build, avec `projectId`), les notifications arrivent
+en **push** : même quand l'application est fermée. Dans Expo Go, elles s'affichent
+seulement quand l'application est ouverte.
+
+## Fabriquer l'application
+
+Icône, écran de démarrage, permissions (position, notifications) et profils de
+fabrication (`eas.json`) sont prêts. Voir **../GUIDE-MISE-EN-SERVICE.md**, étape 4.
 
 > ⚠️ Encore simulée : la carte bancaire.
 

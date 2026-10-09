@@ -165,11 +165,28 @@ export function creerSimulation(nom) {
   };
 }
 
-// Choisit le vrai connecteur si les clés sont présentes, sinon la simulation.
-export function fournisseursDepuisEnv(env = process.env) {
+// En production sans clés : moyen de paiement refusé (jamais de simulation pour de vrais clients).
+export function creerIndisponible(nom) {
+  return {
+    nom,
+    simulation: false,
+    indisponible: true,
+    async creer() {
+      throw new Error(`${nom} : clés marchand non configurées`);
+    },
+    async verifier(paiement) {
+      return paiement.statut;
+    },
+  };
+}
+
+// Choisit le vrai connecteur si les clés sont présentes ; sinon la simulation,
+// ou « indisponible » si la simulation n'est pas autorisée (production).
+export function fournisseursDepuisEnv(env = process.env, { simulationAutorisee = true } = {}) {
+  const sansCles = (nom) => (simulationAutorisee ? creerSimulation(nom) : creerIndisponible(nom));
   const wave = env.WAVE_API_KEY
     ? creerWave({ cleApi: env.WAVE_API_KEY, secretWebhook: env.WAVE_WEBHOOK_SECRET, urlApi: env.WAVE_API_URL })
-    : creerSimulation('wave');
+    : sansCles('wave');
   const orange =
     env.ORANGE_CLIENT_ID && env.ORANGE_CLIENT_SECRET && env.ORANGE_MERCHANT_KEY
       ? creerOrange({
@@ -180,6 +197,6 @@ export function fournisseursDepuisEnv(env = process.env) {
           chemin: env.ORANGE_WEBPAY_PATH,
           devise: env.ORANGE_CURRENCY,
         })
-      : creerSimulation('orange');
+      : sansCles('orange');
   return { wave, orange };
 }

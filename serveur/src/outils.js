@@ -1,3 +1,5 @@
+import { envoyerPush } from './push.js';
+
 // Rayon (km) dans lequel un colis est proposé au livreur.
 export const RAYON_KM = 15;
 
@@ -12,9 +14,12 @@ export function distanceKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+// Enregistre la notification (onglet « Notifications ») et l'envoie en push sur le téléphone.
 export function notifier(db, utilisateurIds, message) {
+  const ids = [...new Set(utilisateurIds.filter(Boolean))];
   const st = db.prepare('INSERT INTO notifications (utilisateur_id, message) VALUES (?, ?)');
-  for (const id of utilisateurIds) if (id) st.run(id, message);
+  for (const id of ids) st.run(id, message);
+  envoyerPush(db, ids, message);
 }
 
 // Prévient le commerçant et les livreurs proches qu'une commande est prête à être livrée.

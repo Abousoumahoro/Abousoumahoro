@@ -16,18 +16,34 @@ const dossierDonnees =
   process.env.DOSSIER_DONNEES || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'donnees');
 fs.mkdirSync(dossierDonnees, { recursive: true });
 const db = ouvrirBase(path.join(dossierDonnees, 'livraison.db'));
-if (remplirDemo(db)) console.log('Comptes de démonstration créés (mot de passe : demo1234).');
+// Les comptes de démo (mot de passe connu) ne sont jamais créés en production, sauf DEMO=1.
+const production = process.env.NODE_ENV === 'production';
+if ((!production || process.env.DEMO === '1') && remplirDemo(db)) {
+  console.log('Comptes de démonstration créés (mot de passe : demo1234).');
+}
+if (production && !process.env.JWT_SECRET) {
+  console.warn('⚠️  JWT_SECRET non défini : un secret a été généré dans le dossier des données.');
+}
 
-const fournisseurs = fournisseursDepuisEnv();
+// Paiements simulés (Wave/Orange sans clés, carte) : seulement hors production, ou avec DEMO=1.
+const simulationAutorisee = !production || process.env.DEMO === '1';
+const fournisseurs = fournisseursDepuisEnv(process.env, { simulationAutorisee });
 const urlPublique = process.env.URL_PUBLIQUE?.replace(/\/$/, '');
 for (const f of Object.values(fournisseurs)) {
-  console.log(`Paiement ${f.nom} : ${f.simulation ? 'SIMULATION (aucune clé configurée)' : 'RÉEL'}`);
-  if (!f.simulation && !urlPublique) {
+  const mode = f.simulation ? 'SIMULATION (aucune clé configurée)' : f.indisponible ? 'DÉSACTIVÉ (clés manquantes)' : 'RÉEL';
+  console.log(`Paiement ${f.nom} : ${mode}`);
+  if (!f.simulation && !f.indisponible && !urlPublique) {
     console.warn(`  ⚠️  Définissez URL_PUBLIQUE (https://…) pour les retours et notifications ${f.nom}.`);
   }
 }
 
-const app = creerApp({ db, jetons: creerJetons(dossierDonnees), fournisseurs, urlPublique });
+const app = creerApp({
+  db,
+  jetons: creerJetons(dossierDonnees),
+  fournisseurs,
+  urlPublique,
+  carteSimulee: simulationAutorisee,
+});
 setInterval(() => avancerLivraisons(db, 1 / DUREE_TRAJET_S), 1000);
 // Filet de sécurité si une notification de paiement se perd.
 let verificationEnCours = false;

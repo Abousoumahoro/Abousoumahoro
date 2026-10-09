@@ -79,6 +79,13 @@ CREATE TABLE IF NOT EXISTS lignes_commande (
   quantite INTEGER NOT NULL CHECK (quantite > 0)
 );
 
+-- Jetons push Expo des téléphones connectés (un compte peut avoir plusieurs téléphones).
+CREATE TABLE IF NOT EXISTS push_jetons (
+  jeton TEXT PRIMARY KEY,
+  utilisateur_id INTEGER NOT NULL REFERENCES utilisateurs(id),
+  cree_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   utilisateur_id INTEGER NOT NULL REFERENCES utilisateurs(id),

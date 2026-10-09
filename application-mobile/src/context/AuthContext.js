@@ -4,6 +4,7 @@ import { ErreurApi, requete } from '../api';
 import { ROLES } from '../constantes';
 
 const CLE_JETON = 'jeton_session';
+const CLE_JETON_PUSH = 'jeton_push';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -53,10 +54,16 @@ export function AuthProvider({ children }) {
     ouvrirSession(await requete('/auth/inscription', { methode: 'POST', corps: donnees }));
 
   const deconnexion = useCallback(async () => {
+    // Ce téléphone ne doit plus recevoir les notifications de ce compte.
+    const jetonPush = await SecureStore.getItemAsync(CLE_JETON_PUSH).catch(() => null);
+    if (jetonPush && jeton) {
+      await requete('/moi/push/supprimer', { methode: 'POST', corps: { jeton: jetonPush }, jeton }).catch(() => {});
+      await SecureStore.deleteItemAsync(CLE_JETON_PUSH).catch(() => {});
+    }
     await SecureStore.deleteItemAsync(CLE_JETON);
     setJeton(null);
     setUtilisateur(null);
-  }, []);
+  }, [jeton]);
 
   // Requête authentifiée ; déconnecte automatiquement si la session a expiré.
   const api = useCallback(
