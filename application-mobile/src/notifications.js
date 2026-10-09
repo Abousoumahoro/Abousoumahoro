@@ -34,7 +34,8 @@ export const CLE_JETON_PUSH = 'jeton_push';
 // compilée avec EAS (projectId dans app.json) : dans Expo Go, on retourne null.
 async function enregistrerPush(api) {
   const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-  if (!projectId || Constants.appOwnership === 'expo') return null;
+  const dansExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
+  if (!projectId || dansExpoGo) return null;
   const { data: jeton } = await Notifications.getExpoPushTokenAsync({ projectId });
   await api('/moi/push', { methode: 'POST', corps: { jeton } });
   await SecureStore.setItemAsync(CLE_JETON_PUSH, jeton);

@@ -6,12 +6,18 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_API_URL": "https://api.votre-domaine.com" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "AUTORISER_HTTP": "1"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://api.votre-domaine.com" }
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.votre-domaine.com"
+      }
     }
   },
   "submit": {

@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { ErreurApi, requete } from '../api';
+import { chargerAdresseServeur, ErreurApi, requete } from '../api';
 import { ROLES } from '../constantes';
 
 const CLE_JETON = 'jeton_session';
@@ -16,6 +16,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     (async () => {
       try {
+        await chargerAdresseServeur();
         const enregistre = await SecureStore.getItemAsync(CLE_JETON);
         if (enregistre) {
           const moi = await requete('/moi', { jeton: enregistre });

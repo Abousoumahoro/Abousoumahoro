@@ -36,6 +36,32 @@ En démo, les paiements Wave / Orange Money ouvrent une **page de simulation** (
 
 ---
 
+## Étape 0 bis — Obtenir un APK Android de test (gratuit)
+
+Pour installer l'application directement sur un téléphone Android, sans Expo Go :
+
+1. Créez un compte gratuit sur **expo.dev**.
+2. Sur l'ordinateur :
+   ```bash
+   npm install -g eas-cli
+   cd application-mobile
+   eas login
+   eas init
+   eas build -p android --profile preview
+   ```
+3. Au bout d'environ 15 minutes, EAS affiche un **lien et un QR code** : ouvrez-le sur le
+   téléphone pour télécharger l'APK, puis installez-le (autorisez « sources inconnues »).
+4. Lancez le serveur sur l'ordinateur (`cd serveur && npm start`) : il affiche son adresse,
+   par exemple `http://192.168.1.20:3000`.
+5. Dans l'application, sur l'écran de connexion, touchez **« ⚙️ Serveur »**, tapez cette
+   adresse (ou seulement `192.168.1.20`), puis **« Tester et enregistrer »**.
+   Le téléphone et l'ordinateur doivent être sur le même Wi-Fi.
+
+> Dans cet APK de test, la carte est un **schéma du trajet** (A → B, livreur 🛵) tant qu'aucune
+> clé Google Maps n'est configurée (voir étape 4). Avec Expo Go ou sur iPhone, la vraie carte s'affiche.
+
+---
+
 ## Étape 1 — Les comptes à ouvrir
 
 | Compte | Pour quoi faire | Coût indicatif |

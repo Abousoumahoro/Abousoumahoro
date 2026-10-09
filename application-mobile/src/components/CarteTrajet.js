@@ -1,9 +1,18 @@
-import { StyleSheet, View } from 'react-native';
+import Constants from 'expo-constants';
+import { Platform, StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
+import CarteSchema from './CarteSchema';
+
+// Sur Android, la carte Google exige une clé dans l'application compilée (sinon plantage).
+// Expo Go fournit la sienne ; sur iPhone, Apple Plans n'en demande pas.
+const dansExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
+const carteDisponible =
+  Platform.OS === 'ios' || dansExpoGo || Constants.expoConfig?.extra?.carteGoogle === true;
 
 // Carte affichant le trajet du point A (commerçant) au point B (client)
 // et la position actuelle du livreur.
 export default function CarteTrajet({ commande, hauteur = 280 }) {
+  if (!carteDisponible) return <CarteSchema commande={commande} hauteur={hauteur} />;
   const { depart, arrivee, positionLivreur } = commande;
   const region = {
     latitude: (depart.latitude + arrivee.latitude) / 2,

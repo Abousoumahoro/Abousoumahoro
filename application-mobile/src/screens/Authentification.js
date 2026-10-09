@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { requete } from '../api';
+import { adresseServeur, changerAdresseServeur, normaliserAdresse, requete, testerServeur } from '../api';
 import { Bouton, EnTete } from '../components/ui';
 import { ROLES } from '../constantes';
 import { useAuth } from '../context/AuthContext';
@@ -140,6 +140,7 @@ export default function Authentification({ role, onRetour }) {
             onPress={valider}
             style={{ marginTop: 8 }}
           />
+          <ReglageServeur couleur={couleur} />
           {mode === 'connexion' && (
             <Text style={styles.aide}>
               Comptes de démo (mot de passe demo1234) :{'\n'}
@@ -148,6 +149,53 @@ export default function Authentification({ role, onRetour }) {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+// Adresse du serveur modifiable : utile pour tester un APK avec le serveur lancé sur un ordinateur.
+function ReglageServeur({ couleur }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [adresse, setAdresse] = useState(adresseServeur());
+  const [saisie, setSaisie] = useState(adresseServeur());
+  const [message, setMessage] = useState(null);
+  const [test, setTest] = useState(false);
+
+  const enregistrer = async () => {
+    setTest(true);
+    setMessage(null);
+    const candidate = normaliserAdresse(saisie);
+    const ok = await testerServeur(candidate);
+    setTest(false);
+    if (!ok) {
+      setMessage(`❌ Pas de réponse de ${candidate}. Vérifiez l'adresse, le Wi-Fi et que le serveur est démarré.`);
+      return;
+    }
+    setAdresse(await changerAdresseServeur(saisie));
+    setMessage('✅ Serveur trouvé et enregistré.');
+    setOuvert(false);
+  };
+
+  return (
+    <View style={styles.serveur}>
+      <Pressable onPress={() => setOuvert((o) => !o)}>
+        <Text style={styles.serveurTexte}>⚙️ Serveur : {adresse}</Text>
+      </Pressable>
+      {ouvert && (
+        <>
+          <TextInput
+            style={[styles.champ, { marginTop: 8, marginBottom: 8 }]}
+            value={saisie}
+            onChangeText={setSaisie}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            placeholder="Ex : 192.168.1.20 (adresse de l'ordinateur)"
+          />
+          <Bouton titre={test ? 'Test…' : 'Tester et enregistrer'} couleur={couleur} contour desactive={test} onPress={enregistrer} />
+        </>
+      )}
+      {message && <Text style={[styles.serveurTexte, { marginTop: 6 }]}>{message}</Text>}
     </View>
   );
 }
@@ -186,5 +234,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   erreur: { color: couleurs.danger, marginBottom: 8, textAlign: 'center' },
+  serveur: { marginTop: 18, alignItems: 'stretch' },
+  serveurTexte: { color: couleurs.texteDoux, textAlign: 'center', fontSize: 13 },
   aide: { color: couleurs.texteDoux, textAlign: 'center', marginTop: 18, fontSize: 13 },
 });
