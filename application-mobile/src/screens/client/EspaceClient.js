@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import { Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ListeNotifications, ResumeCommande } from '../../components/Communs';
-import { BoutonDeconnexion, Bouton, Carte, EnTete, EtatChargement, Onglets, Vide } from '../../components/ui';
+import {
+  BoutonDeconnexion,
+  Bouton,
+  Carte,
+  EnTete,
+  EtatChargement,
+  LogoPaiement,
+  Onglets,
+  Vide,
+} from '../../components/ui';
 import { CATEGORIES, MOYENS_PAIEMENT } from '../../constantes';
 import { useAuth } from '../../context/AuthContext';
 import { useDonnees } from '../../hooks';
@@ -207,10 +216,15 @@ function Panier({ panier, onAjouter, onRetirer, onCommande }) {
       <Text style={styles.section}>Moyen de paiement</Text>
       {MOYENS_PAIEMENT.map((m) => (
         <Pressable key={m.id} onPress={() => setPaiement(m.id)}>
-          <Carte style={[styles.paiement, paiement === m.id && { borderColor: COULEUR, borderWidth: 2 }]}>
-            <Text style={{ fontSize: 16 }}>
-              {paiement === m.id ? '🔘' : '⚪'} {m.icone} {m.label}
-            </Text>
+          <Carte
+            style={[
+              styles.paiement,
+              paiement === m.id && { borderColor: m.couleur || COULEUR, borderWidth: 2 },
+            ]}
+          >
+            <Text style={{ fontSize: 16 }}>{paiement === m.id ? '🔘' : '⚪'}</Text>
+            <LogoPaiement id={m.id} taille={32} />
+            <Text style={{ fontSize: 16, fontWeight: paiement === m.id ? '700' : '400' }}>{m.label}</Text>
           </Carte>
         </Pressable>
       ))}
@@ -259,5 +273,5 @@ const styles = StyleSheet.create({
   quantite: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   quantiteTexte: { fontSize: 16, fontWeight: '700', minWidth: 20, textAlign: 'center' },
   section: { fontSize: 16, fontWeight: '700', marginVertical: 8 },
-  paiement: { paddingVertical: 12 },
+  paiement: { paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
 });

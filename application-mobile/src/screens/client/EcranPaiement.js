@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Linking, StyleSheet, Text, View } from 'react-native';
-import { Bouton, Carte, EnTete } from '../../components/ui';
+import { Bouton, Carte, EnTete, LogoPaiement } from '../../components/ui';
+import { MOYENS_PAIEMENT } from '../../constantes';
 import { useAuth } from '../../context/AuthContext';
 import { couleurs } from '../../theme';
 import { formatPrix } from '../../utils';
 
-const FOURNISSEURS = {
-  wave: { nom: 'Wave', couleur: '#1dc8ff', icone: '🌊' },
-  orange: { nom: 'Orange Money', couleur: '#ff7900', icone: '🟠' },
-};
 
 // Ouvre Wave / Orange Money, puis attend la confirmation du serveur.
 export default function EcranPaiement({ paiement: initial, onReussi, onEchec }) {
@@ -18,7 +15,8 @@ export default function EcranPaiement({ paiement: initial, onReussi, onEchec }) 
   const termine = useRef(false);
   const rappels = useRef({ onReussi, onEchec });
   rappels.current = { onReussi, onEchec };
-  const f = FOURNISSEURS[initial.fournisseur];
+  const moyen = MOYENS_PAIEMENT.find((m) => m.id === initial.fournisseur);
+  const f = { nom: moyen.label, couleur: moyen.couleur };
 
   const ouvrir = useCallback(() => {
     Linking.openURL(initial.url).catch(() =>
@@ -90,10 +88,10 @@ export default function EcranPaiement({ paiement: initial, onReussi, onEchec }) 
 
   return (
     <View style={{ flex: 1 }}>
-      <EnTete titre={`Paiement ${f.nom}`} couleur={f.couleur} />
+      <EnTete titre="Paiement" couleur={f.couleur} />
       <View style={{ padding: 20 }}>
         <Carte style={{ alignItems: 'center', paddingVertical: 28 }}>
-          <Text style={{ fontSize: 48 }}>{f.icone}</Text>
+          <LogoPaiement id={initial.fournisseur} taille={88} />
           <Text style={styles.montant}>{formatPrix(paiement.montant)}</Text>
           {paiement.statut === 'en_attente' && (
             <>

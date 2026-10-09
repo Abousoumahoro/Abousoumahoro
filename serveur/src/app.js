@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { creerUtilisateur } from './db.js';
 import { QUARTIERS, quartierParId } from './quartiers.js';
@@ -89,6 +91,8 @@ export function creerApp({ db, jetons, fournisseurs, urlPublique }) {
   const app = express();
   // Le corps brut est gardé pour vérifier la signature des notifications Wave.
   app.use(express.json({ verify: (req, _res, buf) => { req.corpsBrut = buf; } }));
+  // Logos Orange Money / Wave affichés sur les pages de paiement.
+  app.use('/public', express.static(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public')));
   const adresse = (req) => urlPublique || `${req.protocol}://${req.get('host')}`;
 
   const authentifier = (...roles) => (req, _res, next) => {
@@ -377,10 +381,20 @@ export function creerApp({ db, jetons, fournisseurs, urlPublique }) {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) echec(400, 'Position invalide');
     db.prepare('UPDATE utilisateurs SET latitude = ?, longitude = ? WHERE id = ?')
       .run(latitude, longitude, req.utilisateur.id);
-    db.prepare(
-      "UPDATE commandes SET livreur_lat = ?, livreur_lng = ?, gps_reel = 1 WHERE livreur_id = ? AND statut = 'en_cours'",
-    ).run(latitude, longitude, req.utilisateur.id);
-    res.json({ ok: true });
+    // Avancement = part du trajet A → B déjà parcourue (à vol d'oiseau).
+    const position = { latitude, longitude };
+    const enCours = db
+      .prepare("SELECT * FROM commandes WHERE livreur_id = ? AND statut = 'en_cours'")
+      .all(req.utilisateur.id);
+    for (const c of enCours) {
+      const arrivee = { latitude: c.arrivee_lat, longitude: c.arrivee_lng };
+      const total = distanceKm({ latitude: c.depart_lat, longitude: c.depart_lng }, arrivee) || 1;
+      const progression = Math.min(0.99, Math.max(0, 1 - distanceKm(position, arrivee) / total));
+      db.prepare(
+        'UPDATE commandes SET livreur_lat = ?, livreur_lng = ?, progression = ?, gps_reel = 1 WHERE id = ?',
+      ).run(latitude, longitude, progression, c.id);
+    }
+    res.json({ ok: true, commandesMisesAJour: enCours.length });
   });
 
   // Le livreur confirme la remise du colis (utile avec le GPS réel).

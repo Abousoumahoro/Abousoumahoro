@@ -166,3 +166,35 @@ test('un client ne voit pas la commande d\'un autre client', async () => {
   })).corps.jeton;
   assert.equal((await api(`/commandes/${c.id}`, { jeton: autre })).statut, 404);
 });
+
+test('GPS réel du livreur : position et avancement', async () => {
+  const client = await connexion('0500000010');
+  const livreur = await connexion('0100000020');
+  const riz = (await api('/produits?categorie=courses', { jeton: client })).corps.find((p) => p.nom.startsWith('Riz'));
+  const [c] = (await api('/commandes', {
+    jeton: client,
+    method: 'POST',
+    body: { paiement: 'livraison', articles: [{ produitId: riz.id, quantite: 1 }] },
+  })).corps.commandes;
+  await api('/livreur/accepter', { jeton: livreur, method: 'POST', body: { ids: [c.id] } });
+  await api(`/commandes/${c.id}/verification`, {
+    jeton: livreur,
+    method: 'POST',
+    body: { articlesVerifies: [riz.id], interieurOk: true },
+  });
+  // Milieu du trajet A → B.
+  const milieu = {
+    latitude: (c.depart.latitude + c.arrivee.latitude) / 2,
+    longitude: (c.depart.longitude + c.arrivee.longitude) / 2,
+  };
+  const r = await api('/livreur/position', { jeton: livreur, method: 'POST', body: milieu });
+  assert.equal(r.corps.commandesMisesAJour, 1);
+  avancerLivraisons(db, 0.9); // la simulation ne touche plus une livraison suivie par GPS
+  const suivi = (await api(`/commandes/${c.id}`, { jeton: client })).corps;
+  assert.deepEqual(suivi.positionLivreur, milieu);
+  assert.ok(Math.abs(suivi.progression - 0.5) < 0.05);
+  assert.equal(suivi.statut, 'en_cours');
+  const fin = await api(`/commandes/${c.id}/livree`, { jeton: livreur, method: 'POST' });
+  assert.equal(fin.corps.statut, 'livree');
+  assert.equal(fin.corps.statutPaiement, 'paye');
+});

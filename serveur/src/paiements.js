@@ -3,6 +3,8 @@ import express from 'express';
 import { annoncerCommande, notifier } from './outils.js';
 
 const NOMS = { orange: 'Orange Money', wave: 'Wave' };
+const LOGOS = { orange: '/public/orange-money.png', wave: '/public/wave.png' };
+const COULEURS = { orange: '#ff7900', wave: '#1dc8ff' };
 // Un paiement non confirmé après ce délai est annulé.
 export const EXPIRATION_MIN = 30;
 
@@ -112,7 +114,7 @@ const page = (titre, contenu) => `<!doctype html>
   body{font-family:system-ui,sans-serif;background:#f5f5f4;color:#1c1917;margin:0;padding:24px;text-align:center}
   .carte{background:#fff;border-radius:16px;padding:24px;max-width:420px;margin:40px auto;border:1px solid #e7e5e4}
   button{width:100%;padding:16px;border:0;border-radius:12px;font-size:17px;font-weight:700;color:#fff;margin-top:12px}
-  .ok{background:#16a34a}.non{background:#dc2626}.montant{font-size:28px;font-weight:800;margin:12px 0}
+  .ok{background:#16a34a}.non{background:#fff;color:#dc2626;border:2px solid #dc2626}.montant{font-size:28px;font-weight:800;margin:12px 0}
 </style></head><body><div class="carte">${contenu}</div></body></html>`;
 
 const echapper = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -147,10 +149,11 @@ export function routesPaiement({ db, fournisseurs }) {
     res.send(
       page(
         nom,
-        `<p>🧪 Simulation — aucun argent n'est débité</p><h2>${nom}</h2>
+        `<img src="${LOGOS[p.fournisseur]}" alt="${nom}" width="96" height="96" style="border-radius:22px">
+         <h2>${nom}</h2><p>🧪 Simulation — aucun argent n'est débité</p>
          <div class="montant">${p.montant.toLocaleString('fr-FR')} FCFA</div>
          <form method="post"><input type="hidden" name="s" value="${echapper(p.secret)}">
-           <button class="ok" name="resultat" value="reussi">Payer</button>
+           <button class="ok" style="background:${COULEURS[p.fournisseur]}" name="resultat" value="reussi">Payer</button>
            <button class="non" name="resultat" value="echoue">Refuser</button>
          </form>`,
       ),

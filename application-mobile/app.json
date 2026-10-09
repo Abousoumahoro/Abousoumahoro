@@ -1,16 +1,35 @@
 {
   "expo": {
-    "name": "Application Mobile",
+    "name": "Livraison & Ventes",
     "slug": "application-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.abousoumahoro.applicationmobile"
     },
     "android": {
-      "package": "com.abousoumahoro.applicationmobile"
-    }
+      "package": "com.abousoumahoro.applicationmobile",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Votre position est partagée avec le client et le commerçant pendant une livraison."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#ea580c"
+        }
+      ],
+      "expo-secure-store"
+    ]
   }
 }

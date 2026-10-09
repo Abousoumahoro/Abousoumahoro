@@ -3,7 +3,7 @@ import { MOYENS_PAIEMENT, STATUTS } from '../constantes';
 import { useDonnees } from '../hooks';
 import { couleurs } from '../theme';
 import { formatDate, formatPrix } from '../utils';
-import { Badge, Bouton, Carte, EtatChargement, Vide } from './ui';
+import { Badge, Bouton, Carte, EtatChargement, LogoPaiement, Vide } from './ui';
 
 export function ListeNotifications() {
   const { donnees, erreur, chargement, recharger } = useDonnees('/notifications', 5000);
@@ -69,10 +69,12 @@ export function ResumeCommande({ commande, onPress }) {
         <Text style={{ marginTop: 6, fontWeight: '600' }}>
           Total : {formatPrix(commande.total + commande.fraisLivraison)}
         </Text>
-        <Text style={styles.doux}>
-          {paiement?.icone} {paiement?.label} · {commande.statutPaiement === 'paye' ? 'Payé' : 'À payer'} ·{' '}
-          {formatDate(commande.date)}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <LogoPaiement id={commande.paiement} taille={18} />
+          <Text style={[styles.doux, { flex: 1, marginTop: 0 }]}>
+            {paiement?.label} · {commande.statutPaiement === 'paye' ? 'Payé' : 'À payer'} · {formatDate(commande.date)}
+          </Text>
+        </View>
         {onPress && <Text style={{ color: couleurs.client, marginTop: 6 }}>Voir le suivi ›</Text>}
       </Carte>
     </Pressable>

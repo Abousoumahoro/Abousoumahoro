@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import CarteTrajet from '../../components/CarteTrajet';
 import { FicheContact, ListeNotifications } from '../../components/Communs';
 import {
@@ -14,6 +14,7 @@ import {
 } from '../../components/ui';
 import { STATUTS } from '../../constantes';
 import { useAuth } from '../../context/AuthContext';
+import { useChoixGps, useSuiviGps } from '../../gps';
 import { useDonnees } from '../../hooks';
 import { couleurs } from '../../theme';
 import { distanceKm, formatPrix } from '../../utils';
@@ -24,9 +25,14 @@ export default function EspaceLivreur({ onDeconnexion }) {
   const { utilisateur } = useAuth();
   const [onglet, setOnglet] = useState('disponibles');
   const [colisId, setColisId] = useState(null);
+  const [gpsActif, setGpsActif] = useChoixGps();
+  // Le suivi GPS reste actif quel que soit l'écran affiché.
+  const etatGps = useSuiviGps(gpsActif);
 
   if (colisId) {
-    return <DetailLivraison commandeId={colisId} onRetour={() => setColisId(null)} />;
+    return (
+      <DetailLivraison commandeId={colisId} gpsActif={gpsActif} onRetour={() => setColisId(null)} />
+    );
   }
 
   return (
@@ -36,6 +42,15 @@ export default function EspaceLivreur({ onDeconnexion }) {
         couleur={COULEUR}
         droite={<BoutonDeconnexion onPress={onDeconnexion} />}
       />
+      <View style={styles.gps}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontWeight: '700' }}>📍 GPS réel</Text>
+          <Text style={styles.doux} numberOfLines={1}>
+            {gpsActif ? etatGps : 'Désactivé : trajet simulé (démo)'}
+          </Text>
+        </View>
+        <Switch value={gpsActif} onValueChange={setGpsActif} trackColor={{ true: COULEUR }} />
+      </View>
       <View style={{ flex: 1 }}>
         {onglet === 'disponibles' && <ColisDisponibles onAcceptes={() => setOnglet('livraisons')} />}
         {onglet === 'livraisons' && <MesLivraisons onOuvrir={setColisId} />}
@@ -165,7 +180,7 @@ function MesLivraisons({ onOuvrir }) {
 }
 
 // Vérification obligatoire de l'intérieur du colis, puis trajet A → B sur la carte.
-function DetailLivraison({ commandeId, onRetour }) {
+function DetailLivraison({ commandeId, gpsActif, onRetour }) {
   const { api } = useAuth();
   const { donnees: commande, erreur, chargement, recharger } = useDonnees(`/commandes/${commandeId}`, 2000);
   const [coches, setCoches] = useState({});
@@ -253,6 +268,11 @@ function DetailLivraison({ commandeId, onRetour }) {
         {commande.statut === 'en_cours' && (
           <Carte>
             <Text style={styles.titre}>🛵 En route vers le point B…</Text>
+            <Text style={styles.doux}>
+              {gpsActif
+                ? 'Votre position GPS est partagée avec le client et le commerçant.'
+                : 'Trajet simulé. Activez « GPS réel » pour partager votre vraie position.'}
+            </Text>
             {commande.positionLivreur && (
               <Text style={styles.doux}>
                 Restant : {distanceKm(commande.positionLivreur, commande.arrivee).toFixed(1)} km
@@ -287,4 +307,14 @@ const styles = StyleSheet.create({
   doux: { color: couleurs.texteDoux, marginTop: 2 },
   pied: { padding: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: couleurs.bordure },
   case: { paddingVertical: 8 },
+  gps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: couleurs.bordure,
+  },
 });

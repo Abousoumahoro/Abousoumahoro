@@ -6,8 +6,8 @@ export const CATEGORIES = [
 
 export const MOYENS_PAIEMENT = [
   { id: 'carte', label: 'Carte bancaire', icone: '💳' },
-  { id: 'orange', label: 'Orange Money', icone: '🟠' },
-  { id: 'wave', label: 'Wave', icone: '🌊' },
+  { id: 'orange', label: 'Orange Money', icone: '🟠', logo: require('../assets/paiement/orange-money.png'), couleur: '#ff7900' },
+  { id: 'wave', label: 'Wave', icone: '🌊', logo: require('../assets/paiement/wave.png'), couleur: '#1dc8ff' },
   { id: 'livraison', label: 'Paiement à la livraison', icone: '💵' },
 ];
 

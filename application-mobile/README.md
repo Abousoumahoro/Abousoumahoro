@@ -1,5 +1,7 @@
 # Livraison & Ventes — Application Mobile (Android + iPhone)
 
+![Aperçu](../docs/apercu.png)
+
 Projet [Expo](https://expo.dev) SDK 57 / React Native : un seul code pour Android et iOS.
 
 ## Les 3 espaces
@@ -39,10 +41,25 @@ Chacun ne voit que ses propres commandes et notifications.
 - **Paiement à la livraison** : le livreur voit le montant à encaisser.
 - **Carte bancaire** : encore simulée.
 
-> ⚠️ Encore simulés : la carte bancaire et le déplacement du livreur
-> (le serveur fait avancer le livreur de A à B). Étapes suivantes : vrai GPS
-> (`expo-location`, la route `POST /livreur/position` est prête), notifications
-> push (`expo-notifications`).
+## GPS du livreur
+
+Interrupteur **« 📍 GPS réel »** en haut de l'espace livreur :
+- **désactivé** (par défaut) : le trajet A → B est simulé — pratique pour une démo hors d'Abidjan ;
+- **activé** : la position du téléphone est envoyée au serveur toutes les 10 s (ou tous les 20 m)
+  pendant que l'application est ouverte. Le client et le commerçant voient le livreur bouger
+  sur la carte, et le livreur confirme la remise avec « J'ai remis le colis ».
+  Les colis proposés sont alors ceux à moins de 15 km de sa vraie position.
+
+## Notifications sur le téléphone
+
+Chaque nouvel événement (commande payée, colis accepté, livreur en route, colis livré…)
+s'affiche en bannière avec un son, tant que l'application est ouverte ou en arrière-plan récent.
+
+> Les notifications quand l'application est **complètement fermée** demandent une
+> application compilée (EAS Build) et des notifications « push » envoyées par le serveur :
+> c'est l'étape à faire avant la publication sur le Play Store / l'App Store.
+
+> ⚠️ Encore simulée : la carte bancaire.
 
 ## Démarrer
 

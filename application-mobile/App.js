@@ -8,6 +8,7 @@ import ChoixRole from './src/screens/ChoixRole';
 import EspaceClient from './src/screens/client/EspaceClient';
 import EspaceCommercant from './src/screens/commercant/EspaceCommercant';
 import EspaceLivreur from './src/screens/livreur/EspaceLivreur';
+import { useAlertesTelephone } from './src/notifications';
 import { couleurs } from './src/theme';
 
 const ESPACES = {
@@ -32,6 +33,7 @@ export default function App() {
 function Navigation() {
   const { utilisateur, demarrage, deconnexion } = useAuth();
   const [roleChoisi, setRoleChoisi] = useState(null);
+  useAlertesTelephone();
 
   // Bouton « retour » Android : depuis la connexion, revenir au choix du profil.
   useEffect(() => {

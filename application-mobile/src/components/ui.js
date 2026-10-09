@@ -1,4 +1,5 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { MOYENS_PAIEMENT } from '../constantes';
 import { couleurs } from '../theme';
 
 export function Bouton({ titre, onPress, couleur = couleurs.primaire, desactive, contour, style }) {
@@ -34,17 +35,19 @@ export function Badge({ texte, couleur }) {
 export function EnTete({ titre, couleur, onRetour, droite }) {
   return (
     <View style={[styles.entete, { backgroundColor: couleur }]}>
-      {onRetour ? (
-        <Pressable onPress={onRetour} hitSlop={12}>
-          <Text style={styles.enteteRetour}>‹ Retour</Text>
-        </Pressable>
-      ) : (
-        <View style={{ width: 60 }} />
-      )}
+      <View style={styles.enteteCote}>
+        {onRetour && (
+          <Pressable onPress={onRetour} hitSlop={12}>
+            <Text style={styles.enteteRetour} numberOfLines={1}>
+              ‹ Retour
+            </Text>
+          </Pressable>
+        )}
+      </View>
       <Text style={styles.enteteTitre} numberOfLines={1}>
         {titre}
       </Text>
-      <View style={{ minWidth: 60, alignItems: 'flex-end' }}>{droite}</View>
+      <View style={[styles.enteteCote, { alignItems: 'flex-end' }]}>{droite}</View>
     </View>
   );
 }
@@ -101,8 +104,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
-  enteteTitre: { color: '#fff', fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' },
-  enteteRetour: { color: '#fff', fontSize: 16, width: 60 },
+  enteteTitre: { color: '#fff', fontSize: 17, fontWeight: '700', flex: 1, textAlign: 'center' },
+  enteteRetour: { color: '#fff', fontSize: 16 },
+  enteteCote: { width: 84 },
   onglets: {
     flexDirection: 'row',
     borderTopWidth: 1,
@@ -127,10 +131,20 @@ export function EtatChargement({ chargement, erreur, onReessayer }) {
   );
 }
 
+// Logo Orange Money / Wave, ou icône pour les autres moyens de paiement.
+export function LogoPaiement({ id, taille = 24 }) {
+  const m = MOYENS_PAIEMENT.find((p) => p.id === id);
+  if (!m) return null;
+  if (m.logo) {
+    return <Image source={m.logo} style={{ width: taille, height: taille, borderRadius: taille / 4 }} />;
+  }
+  return <Text style={{ fontSize: taille * 0.75 }}>{m.icone}</Text>;
+}
+
 export function BoutonDeconnexion({ onPress }) {
   return (
     <Pressable onPress={onPress} hitSlop={12}>
-      <Text style={{ color: '#fff', fontSize: 14 }}>Déconnexion</Text>
+      <Text style={{ color: '#fff', fontSize: 13 }}>Déconnexion</Text>
     </Pressable>
   );
 }
