@@ -5,6 +5,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { avancerLivraisons, creerApp } from '../src/app.js';
 import { ouvrirBase, remplirDemo } from '../src/db.js';
+import { creerSimulation } from '../src/fournisseurs.js';
 import { creerJetons } from '../src/securite.js';
 
 let serveur;
@@ -15,7 +16,8 @@ const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'livraison-test-'));
 before(async () => {
   db = ouvrirBase(':memory:');
   remplirDemo(db);
-  const app = creerApp({ db, jetons: creerJetons(dossier) });
+  const fournisseurs = { wave: creerSimulation('wave'), orange: creerSimulation('orange') };
+  const app = creerApp({ db, jetons: creerJetons(dossier), fournisseurs });
   await new Promise((ok) => {
     serveur = app.listen(0, ok);
   });
@@ -110,8 +112,9 @@ test('parcours complet : publication, commande, vérification, livraison', async
     },
   });
   assert.equal(cmd.statut, 201);
-  assert.equal(cmd.corps.length, 2);
-  const commande = cmd.corps.find((c) => c.commercant.nom === 'Chez Tantie Awa');
+  assert.equal(cmd.corps.commandes.length, 2);
+  assert.equal(cmd.corps.paiement, null);
+  const commande = cmd.corps.commandes.find((c) => c.commercant.nom === 'Chez Tantie Awa');
   assert.equal(commande.total, 6000);
   assert.equal(commande.statutPaiement, 'en_attente');
 

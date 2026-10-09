@@ -8,6 +8,7 @@ import { useDonnees } from '../../hooks';
 import { couleurs } from '../../theme';
 import { formatPrix } from '../../utils';
 import SuiviCommande from '../SuiviCommande';
+import EcranPaiement from './EcranPaiement';
 
 const COULEUR = couleurs.client;
 const FRAIS_LIVRAISON = 1000;
@@ -18,6 +19,28 @@ export default function EspaceClient({ onDeconnexion }) {
   const [suiviId, setSuiviId] = useState(null);
   // Panier : [{ produit, quantite }]
   const [panier, setPanier] = useState([]);
+  // Paiement Orange Money / Wave en cours : { paiement, commandeId }
+  const [paiementEnCours, setPaiementEnCours] = useState(null);
+
+  const commandeValidee = (commandeId) => {
+    setPanier([]);
+    setPaiementEnCours(null);
+    setOnglet('commandes');
+    setSuiviId(commandeId);
+  };
+
+  if (paiementEnCours) {
+    return (
+      <EcranPaiement
+        paiement={paiementEnCours.paiement}
+        onReussi={() => commandeValidee(paiementEnCours.commandeId)}
+        onEchec={() => {
+          setPaiementEnCours(null);
+          setOnglet('panier');
+        }}
+      />
+    );
+  }
 
   if (suiviId) {
     return <SuiviCommande commandeId={suiviId} couleur={COULEUR} onRetour={() => setSuiviId(null)} />;
@@ -52,10 +75,9 @@ export default function EspaceClient({ onDeconnexion }) {
             panier={panier}
             onAjouter={ajouter}
             onRetirer={retirer}
-            onCommandeOk={(id) => {
-              setPanier([]);
-              setOnglet('commandes');
-              setSuiviId(id);
+            onCommande={({ commandes, paiement }) => {
+              if (paiement) setPaiementEnCours({ paiement, commandeId: commandes[0].id });
+              else commandeValidee(commandes[0].id);
             }}
           />
         )}
@@ -122,7 +144,7 @@ function Boutique({ onAjouter }) {
   );
 }
 
-function Panier({ panier, onAjouter, onRetirer, onCommandeOk }) {
+function Panier({ panier, onAjouter, onRetirer, onCommande }) {
   const { api, utilisateur } = useAuth();
   const [paiement, setPaiement] = useState(null);
   const [envoi, setEnvoi] = useState(false);
@@ -135,21 +157,23 @@ function Panier({ panier, onAjouter, onRetirer, onCommandeOk }) {
   const commander = async () => {
     setEnvoi(true);
     try {
-      const creees = await api('/commandes', {
+      const resultat = await api('/commandes', {
         methode: 'POST',
         corps: {
           paiement,
           articles: panier.map((l) => ({ produitId: l.produit.id, quantite: l.quantite })),
         },
       });
-      const moyen = MOYENS_PAIEMENT.find((p) => p.id === paiement);
-      Alert.alert(
-        'Commande envoyée ✅',
-        paiement === 'livraison'
-          ? 'Vous paierez au livreur à la réception.'
-          : `Paiement par ${moyen.label} (simulation de démo).`,
-      );
-      onCommandeOk(creees[0].id);
+      // Orange Money / Wave : l'écran de paiement prend le relais.
+      if (!resultat.paiement) {
+        Alert.alert(
+          'Commande envoyée ✅',
+          paiement === 'livraison'
+            ? 'Vous paierez au livreur à la réception.'
+            : 'Paiement par carte (simulation de démo).',
+        );
+      }
+      onCommande(resultat);
     } catch (e) {
       Alert.alert('Commande impossible', e.message);
     } finally {

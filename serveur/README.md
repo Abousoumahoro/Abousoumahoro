@@ -32,6 +32,52 @@ Les données sont dans `donnees/livraison.db` (supprimez le dossier `donnees/` p
 | `JWT_SECRET` | Secret des sessions (**obligatoire en production**) | généré dans `donnees/.secret` |
 | `DOSSIER_DONNEES` | Dossier de la base | `serveur/donnees` |
 | `DUREE_TRAJET_S` | Durée simulée d'un trajet A → B | 60 |
+| `URL_PUBLIQUE` | Adresse internet HTTPS du serveur (retours et notifications de paiement) | — |
+
+## Paiement Orange Money et Wave
+
+**Sans clés, le paiement est en mode simulation** : le téléphone ouvre une page du serveur
+avec les boutons « Payer » / « Refuser ». Aucun argent n'est débité.
+
+Déroulement :
+1. Le client commande avec Orange Money ou Wave → la commande est **en attente du paiement**
+   (invisible pour le commerçant et les livreurs).
+2. L'application ouvre Wave ou la page Orange Money ; le client valide.
+3. Orange / Wave préviennent le serveur ; **le serveur redemande toujours le statut au fournisseur**
+   avant de valider (une notification ou un retour navigateur ne suffit pas).
+4. Paiement confirmé → la commande est payée, le commerçant et les livreurs proches sont prévenus.
+   Paiement refusé, annulé ou non confirmé après 30 min → commande annulée, le panier du client est conservé.
+
+### Passer en paiement réel
+
+1. Ouvrir un compte marchand :
+   - **Wave Business** → clé API Checkout et secret de webhook (signature).
+   - **Orange Money** (Orange Developer, API « Web Payment ») → Client ID, Client Secret et Merchant Key.
+2. Héberger le serveur sur internet en **HTTPS** et définir `URL_PUBLIQUE`.
+3. Déclarer l'adresse de notification :
+   - Wave : `https://<URL_PUBLIQUE>/paiements/wave/notification`
+   - Orange : envoyée automatiquement à chaque paiement (`notif_url`).
+4. Définir les variables :
+
+| Variable | Rôle |
+|---|---|
+| `WAVE_API_KEY` | Clé API Wave Checkout |
+| `WAVE_WEBHOOK_SECRET` | Secret de signature des webhooks Wave |
+| `WAVE_API_URL` | (facultatif) défaut `https://api.wave.com` |
+| `ORANGE_CLIENT_ID`, `ORANGE_CLIENT_SECRET` | Identifiants de l'application Orange Developer |
+| `ORANGE_MERCHANT_KEY` | Clé marchand Orange Money |
+| `ORANGE_API_URL` | (facultatif) défaut `https://api.orange.com` |
+| `ORANGE_WEBPAY_PATH` | (facultatif) défaut `/orange-money-webpay/ci/v1` (Côte d'Ivoire) |
+| `ORANGE_CURRENCY` | (facultatif) défaut `XOF` — l'environnement de test Orange utilise souvent `OUV` |
+
+Au démarrage, le serveur affiche pour chaque moyen « SIMULATION » ou « RÉEL ».
+
+> ⚠️ Les adresses et formats des API Orange et Wave ont été écrits d'après leur documentation
+> publique et testés avec un faux serveur, **pas encore avec de vraies clés**. Faites un premier
+> paiement de test (environnement sandbox) et vérifiez les valeurs ci-dessus avec la
+> documentation fournie lors de votre inscription marchand.
+
+La carte bancaire reste simulée (considérée payée immédiatement).
 
 ## Sécurité
 
@@ -51,5 +97,7 @@ Les données sont dans `donnees/livraison.db` (supprimez le dossier `donnees/` p
 | GET | `/produits?categorie=` | connecté |
 | GET/POST/DELETE | `/mes-produits`, `/produits`, `/produits/:id` | commerçant |
 | POST | `/commandes` | client |
+| GET/POST | `/paiements/:id`, `/paiements/:id/verifier`, `/paiements/:id/annuler` | client |
+| POST | `/paiements/wave/notification`, `/paiements/orange/notification` | Wave / Orange |
 | GET | `/livreur/colis-proches` | livreur |
 | POST | `/livreur/accepter`, `/commandes/:id/verification`, `/commandes/:id/livree`, `/livreur/position` | livreur |

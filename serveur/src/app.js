@@ -1,11 +1,12 @@
 import express from 'express';
 import { creerUtilisateur } from './db.js';
 import { QUARTIERS, quartierParId } from './quartiers.js';
+import { annoncerCommande, distanceKm, notifier, RAYON_KM } from './outils.js';
+import { demarrerPaiement, paiementPublic, routesPaiement, verifierPaiement, appliquerResultat } from './paiements.js';
 import { normaliserTelephone, verifierMotDePasse } from './securite.js';
 
 export const FRAIS_LIVRAISON = 1000;
-// Rayon (km) dans lequel un colis est proposé au livreur.
-export const RAYON_KM = 15;
+const PAIEMENT_MOBILE = ['orange', 'wave'];
 const ROLES = ['client', 'livreur', 'commercant'];
 const CATEGORIES = ['repas', 'courses', 'divers'];
 const PAIEMENTS = ['carte', 'orange', 'wave', 'livraison'];
@@ -20,23 +21,7 @@ const echec = (statut, message) => {
   throw new ErreurApi(statut, message);
 };
 
-export function distanceKm(a, b) {
-  const R = 6371;
-  const rad = (x) => (x * Math.PI) / 180;
-  const dLat = rad(b.latitude - a.latitude);
-  const dLon = rad(b.longitude - a.longitude);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
 const dateIso = (d) => (d ? `${d.replace(' ', 'T')}Z` : null);
-
-export function notifier(db, utilisateurIds, message) {
-  const st = db.prepare('INSERT INTO notifications (utilisateur_id, message) VALUES (?, ?)');
-  for (const id of utilisateurIds) if (id) st.run(id, message);
-}
 
 function profilPublic(u) {
   return {
@@ -98,9 +83,13 @@ function commandeComplete(db, c) {
   };
 }
 
-export function creerApp({ db, jetons }) {
+// urlPublique : adresse internet du serveur (obligatoire avec les vraies clés Orange / Wave,
+// pour les pages de retour et les notifications). Sinon : l'adresse utilisée par le téléphone.
+export function creerApp({ db, jetons, fournisseurs, urlPublique }) {
   const app = express();
-  app.use(express.json());
+  // Le corps brut est gardé pour vérifier la signature des notifications Wave.
+  app.use(express.json({ verify: (req, _res, buf) => { req.corpsBrut = buf; } }));
+  const adresse = (req) => urlPublique || `${req.protocol}://${req.get('host')}`;
 
   const authentifier = (...roles) => (req, _res, next) => {
     const entete = req.get('authorization') || '';
@@ -205,7 +194,7 @@ export function creerApp({ db, jetons }) {
   // ---------- Commandes ----------
   // Le client envoie son panier ; le serveur recalcule les prix et crée
   // une commande par commerçant (chaque commerçant = un point de départ A).
-  app.post('/commandes', authentifier('client'), (req, res) => {
+  app.post('/commandes', authentifier('client'), async (req, res) => {
     const client = req.utilisateur;
     const { articles, paiement } = req.body || {};
     if (!PAIEMENTS.includes(paiement)) echec(400, 'Moyen de paiement invalide');
@@ -221,6 +210,7 @@ export function creerApp({ db, jetons }) {
       parCommercant.get(p.commercant_id).push({ p, quantite });
     }
 
+    const mobile = PAIEMENT_MOBILE.includes(paiement);
     const creees = [];
     db.exec('BEGIN');
     try {
@@ -229,32 +219,26 @@ export function creerApp({ db, jetons }) {
         const total = lignes.reduce((s, l) => s + l.p.prix * l.quantite, 0);
         const r = db
           .prepare(
-            `INSERT INTO commandes (client_id, commercant_id, paiement, total, frais_livraison, adresse_livraison,
+            `INSERT INTO commandes (client_id, commercant_id, statut, paiement, total, frais_livraison, adresse_livraison,
                depart_lat, depart_lng, arrivee_lat, arrivee_lng)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
-          .run(client.id, m.id, paiement, total, FRAIS_LIVRAISON, client.adresse,
+          .run(client.id, m.id, mobile ? 'attente_paiement' : 'en_attente', paiement, total, FRAIS_LIVRAISON, client.adresse,
             m.latitude, m.longitude, client.latitude, client.longitude);
         const id = Number(r.lastInsertRowid);
         const ligne = db.prepare(
           'INSERT INTO lignes_commande (commande_id, produit_id, nom, prix, quantite) VALUES (?, ?, ?, ?, ?)',
         );
         for (const l of lignes) ligne.run(id, l.p.id, l.p.nom, l.p.prix, l.quantite);
-        // Paiement en ligne : simulé comme accepté immédiatement (à brancher sur Orange Money / Wave / carte).
-        if (paiement !== 'livraison') {
+        creees.push(id);
+        // Orange Money / Wave : la commande n'est visible des livreurs qu'une fois payée.
+        if (mobile) continue;
+        // Carte bancaire : encore simulée, considérée comme payée immédiatement.
+        if (paiement === 'carte') {
           db.prepare("UPDATE commandes SET statut_paiement = 'paye' WHERE id = ?").run(id);
         }
-        creees.push(id);
         notifier(db, [client.id], `Commande #${id} enregistrée. Recherche d'un livreur…`);
-        notifier(db, [m.id], `Nouvelle commande #${id} : ${lignes.length} article(s).`);
-        const livreurs = db.prepare("SELECT id, latitude, longitude FROM utilisateurs WHERE role = 'livreur'").all();
-        notifier(
-          db,
-          livreurs
-            .filter((l) => distanceKm(l, { latitude: m.latitude, longitude: m.longitude }) <= RAYON_KM)
-            .map((l) => l.id),
-          `Nouveau colis disponible près de vous : #${id}.`,
-        );
+        annoncerCommande(db, db.prepare('SELECT * FROM commandes WHERE id = ?').get(id), `: ${lignes.length} article(s)`);
       }
       db.exec('COMMIT');
     } catch (e) {
@@ -262,7 +246,50 @@ export function creerApp({ db, jetons }) {
       throw e;
     }
     const lire = db.prepare('SELECT * FROM commandes WHERE id = ?');
-    res.status(201).json(creees.map((id) => commandeComplete(db, lire.get(id))));
+    let paiementCree = null;
+    if (mobile) {
+      const montant = creees.reduce((s, id) => {
+        const c = lire.get(id);
+        return s + c.total + c.frais_livraison;
+      }, 0);
+      try {
+        paiementCree = paiementPublic(
+          await demarrerPaiement({
+            db, fournisseurs, urlPublique: adresse(req), client, fournisseur: paiement, commandeIds: creees, montant,
+          }),
+        );
+      } catch {
+        echec(502, `Le paiement ${paiement === 'wave' ? 'Wave' : 'Orange Money'} est indisponible. Réessayez ou choisissez un autre moyen.`);
+      }
+    }
+    res.status(201).json({
+      commandes: creees.map((id) => commandeComplete(db, lire.get(id))),
+      paiement: paiementCree,
+    });
+  });
+
+  // ---------- Paiements Orange Money / Wave ----------
+  const paiementDuClient = (req) => {
+    const p = db.prepare('SELECT * FROM paiements WHERE id = ? AND client_id = ?').get(Number(req.params.id), req.utilisateur.id);
+    if (!p) echec(404, 'Paiement introuvable');
+    return p;
+  };
+
+  app.get('/paiements/:id', authentifier('client'), (req, res) => {
+    res.json(paiementPublic(paiementDuClient(req)));
+  });
+
+  // « J'ai payé » : on redemande le statut au fournisseur.
+  app.post('/paiements/:id/verifier', authentifier('client'), async (req, res) => {
+    const p = paiementDuClient(req);
+    res.json(paiementPublic(await verifierPaiement(db, fournisseurs, p.id)));
+  });
+
+  // Le client abandonne : on vérifie d'abord qu'il n'a pas déjà payé.
+  app.post('/paiements/:id/annuler', authentifier('client'), async (req, res) => {
+    const p = await verifierPaiement(db, fournisseurs, paiementDuClient(req).id);
+    if (p.statut === 'en_attente') appliquerResultat(db, p.id, 'echoue');
+    res.json(paiementPublic(db.prepare('SELECT * FROM paiements WHERE id = ?').get(p.id)));
   });
 
   // Chacun ne voit que ses propres commandes.
@@ -270,8 +297,11 @@ export function creerApp({ db, jetons }) {
 
   app.get('/commandes', authentifier(), (req, res) => {
     const col = COLONNE_ROLE[req.utilisateur.role];
+    // Le commerçant ne voit une commande Orange Money / Wave qu'une fois payée.
+    const filtre =
+      req.utilisateur.role === 'commercant' ? "AND statut NOT IN ('attente_paiement', 'annulee')" : '';
     const lignes = db
-      .prepare(`SELECT * FROM commandes WHERE ${col} = ? ORDER BY id DESC`)
+      .prepare(`SELECT * FROM commandes WHERE ${col} = ? ${filtre} ORDER BY id DESC`)
       .all(req.utilisateur.id);
     res.json(lignes.map((c) => commandeComplete(db, c)));
   });
@@ -368,6 +398,8 @@ export function creerApp({ db, jetons }) {
       .all(req.utilisateur.id);
     res.json(lignes.map((n) => ({ id: n.id, message: n.message, date: dateIso(n.cree_le) })));
   });
+
+  app.use(routesPaiement({ db, fournisseurs }));
 
   app.use((_req, _res, next) => next(new ErreurApi(404, 'Route introuvable')));
   app.use((err, _req, res, _next) => {

@@ -12,10 +12,12 @@ export const MOYENS_PAIEMENT = [
 ];
 
 export const STATUTS = {
+  attente_paiement: { label: 'En attente du paiement', couleur: '#78716c' },
   en_attente: { label: 'En attente d\'un livreur', couleur: '#f59e0b' },
   verification: { label: 'Livreur : vérification du colis', couleur: '#8b5cf6' },
   en_cours: { label: 'En cours de livraison', couleur: '#3b82f6' },
   livree: { label: 'Livrée', couleur: '#16a34a' },
+  annulee: { label: 'Annulée', couleur: '#dc2626' },
 };
 
 export const ROLES = {

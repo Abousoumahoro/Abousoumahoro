@@ -31,10 +31,18 @@ nom de boutique pour le commerçant, véhicule pour le livreur) puis se connecte
 La session reste enregistrée de façon sécurisée sur le téléphone (`expo-secure-store`).
 Chacun ne voit que ses propres commandes et notifications.
 
-> ⚠️ Encore simulés : le paiement en ligne et le déplacement du livreur
+## Paiement
+
+- **Orange Money / Wave** : l'application ouvre Wave ou la page Orange Money, puis attend la
+  confirmation du serveur (écran « Paiement en cours »). Tant qu'aucune clé marchand n'est
+  configurée sur le serveur, une page de **simulation** s'ouvre (voir `../serveur/README.md`).
+- **Paiement à la livraison** : le livreur voit le montant à encaisser.
+- **Carte bancaire** : encore simulée.
+
+> ⚠️ Encore simulés : la carte bancaire et le déplacement du livreur
 > (le serveur fait avancer le livreur de A à B). Étapes suivantes : vrai GPS
 > (`expo-location`, la route `POST /livreur/position` est prête), notifications
-> push (`expo-notifications`), API Orange Money / Wave / carte.
+> push (`expo-notifications`).
 
 ## Démarrer
 

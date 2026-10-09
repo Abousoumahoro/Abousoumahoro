@@ -31,13 +31,29 @@ CREATE TABLE IF NOT EXISTS produits (
   cree_le TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Un paiement Orange Money / Wave couvre tout le panier (une ou plusieurs commandes).
+CREATE TABLE IF NOT EXISTS paiements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  client_id INTEGER NOT NULL REFERENCES utilisateurs(id),
+  fournisseur TEXT NOT NULL CHECK (fournisseur IN ('orange', 'wave')),
+  montant INTEGER NOT NULL,
+  statut TEXT NOT NULL DEFAULT 'en_attente' CHECK (statut IN ('en_attente', 'reussi', 'echoue')),
+  reference TEXT NOT NULL UNIQUE,
+  reference_externe TEXT,
+  secret TEXT NOT NULL,
+  url TEXT,
+  cree_le TEXT NOT NULL DEFAULT (datetime('now')),
+  maj_le TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS commandes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   client_id INTEGER NOT NULL REFERENCES utilisateurs(id),
   commercant_id INTEGER NOT NULL REFERENCES utilisateurs(id),
   livreur_id INTEGER REFERENCES utilisateurs(id),
   statut TEXT NOT NULL DEFAULT 'en_attente'
-    CHECK (statut IN ('en_attente', 'verification', 'en_cours', 'livree')),
+    CHECK (statut IN ('attente_paiement', 'en_attente', 'verification', 'en_cours', 'livree', 'annulee')),
+  paiement_id INTEGER REFERENCES paiements(id),
   paiement TEXT NOT NULL CHECK (paiement IN ('carte', 'orange', 'wave', 'livraison')),
   statut_paiement TEXT NOT NULL DEFAULT 'en_attente' CHECK (statut_paiement IN ('en_attente', 'paye')),
   total INTEGER NOT NULL,
@@ -73,8 +89,27 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 export function ouvrirBase(fichier) {
   const db = new DatabaseSync(fichier);
+  migrerCommandes(db);
   db.exec(SCHEMA);
   return db;
+}
+
+// Bases créées avant le paiement mobile : on reconstruit la table « commandes »
+// avec les nouveaux statuts et la colonne paiement_id, en gardant les données.
+function migrerCommandes(db) {
+  const table = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'commandes'").get();
+  if (!table || table.sql.includes('paiement_id')) return;
+  const colonnes = db.prepare('PRAGMA table_info(commandes)').all().map((c) => c.name).join(', ');
+  db.exec('PRAGMA foreign_keys = OFF');
+  // Empêche SQLite de réécrire les références de lignes_commande vers l'ancienne table.
+  db.exec('PRAGMA legacy_alter_table = ON');
+  db.exec('BEGIN');
+  db.exec('ALTER TABLE commandes RENAME TO commandes_ancienne');
+  db.exec(SCHEMA);
+  db.exec(`INSERT INTO commandes (${colonnes}) SELECT ${colonnes} FROM commandes_ancienne`);
+  db.exec('DROP TABLE commandes_ancienne');
+  db.exec('COMMIT');
+  db.exec('PRAGMA legacy_alter_table = OFF');
 }
 
 export function creerUtilisateur(db, u) {
