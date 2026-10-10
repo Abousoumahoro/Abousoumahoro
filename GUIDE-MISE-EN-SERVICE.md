@@ -7,6 +7,11 @@ publiée sur le **Play Store** et l'**App Store**, avec de vrais paiements.
 
 ## Étape 0 — Tester chez vous (gratuit, 10 minutes)
 
+> **Sur Windows, le plus simple :** installez Node.js, puis **double-cliquez sur
+> `LANCER-WINDOWS.bat`** (à la racine du projet) et acceptez la demande d'autorisation.
+> Il ouvre le pare-feu, démarre le serveur et l'application. Il ne reste qu'à scanner
+> le QR code avec Expo Go.
+
 Il faut un ordinateur avec **Node.js 22.13 ou plus récent** (https://nodejs.org).
 
 ```bash
