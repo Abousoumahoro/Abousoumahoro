@@ -1,22 +1,34 @@
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
 import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { useAuth } from './context/AuthContext';
 
-// Afficher la bannière même quand l'application est au premier plan.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+const dansExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
+
+// expo-notifications n'est plus pris en charge par Expo Go sur Android : on ne le charge
+// que dans l'application compilée (APK / App Store) ou sur iPhone. Sinon, les notifications
+// restent visibles dans l'onglet « Notifications » de l'application.
+let Notifications = null;
+if (Platform.OS !== 'web' && !(dansExpoGo && Platform.OS === 'android')) {
+  try {
+    Notifications = require('expo-notifications');
+    // Afficher la bannière même quand l'application est au premier plan.
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch {
+    Notifications = null;
+  }
+}
 
 async function preparer() {
-  if (Platform.OS === 'web') return false;
+  if (!Notifications) return false;
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('commandes', {
       name: 'Commandes et livraisons',
@@ -34,8 +46,7 @@ export const CLE_JETON_PUSH = 'jeton_push';
 // compilée avec EAS (projectId dans app.json) : dans Expo Go, on retourne null.
 async function enregistrerPush(api) {
   const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-  const dansExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
-  if (!projectId || dansExpoGo) return null;
+  if (!Notifications || !projectId || dansExpoGo) return null;
   const { data: jeton } = await Notifications.getExpoPushTokenAsync({ projectId });
   await api('/moi/push', { methode: 'POST', corps: { jeton } });
   await SecureStore.setItemAsync(CLE_JETON_PUSH, jeton);

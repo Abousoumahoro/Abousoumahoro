@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, BackHandler, StyleSheet } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import GardeErreur from './src/components/GardeErreur';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import Authentification from './src/screens/Authentification';
 import ChoixRole from './src/screens/ChoixRole';
@@ -19,14 +20,18 @@ const ESPACES = {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <SafeAreaView style={styles.conteneur} edges={['top', 'bottom']}>
-          <Navigation />
-        </SafeAreaView>
-        <StatusBar style="dark" />
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GardeErreur>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <SafeAreaView style={styles.conteneur} edges={['top', 'bottom']}>
+            <GardeErreur>
+              <Navigation />
+            </GardeErreur>
+          </SafeAreaView>
+          <StatusBar style="dark" />
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GardeErreur>
   );
 }
 
